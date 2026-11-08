@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Tatum Games palette: purple #a787bd, teal #86c4c2, green #c7d47f, yellow #f6d271,
+ * coral #d87b7a. The bright brand hues are used for accents, charts and status
+ * fills (always with dark text); a deeper purple carries white text on buttons so
+ * contrast meets WCAG AA in both themes.
+ */
+:root {
+  --brand-purple: #a787bd;
+  --brand-teal: #86c4c2;
+  --brand-green: #c7d47f;
+  --brand-yellow: #f6d271;
+  --brand-coral: #d87b7a;
+
+  --background: #f7f5fa;
+  --foreground: #1f1a26;
+  --card: #ffffff;
+  --card-foreground: #1f1a26;
+  --muted: #efebf4;
+  --muted-foreground: #5d5568;
+  --border: #e1dbe9;
+  --input: #d6cee1;
+  --primary: #6f4f8a;
+  --primary-foreground: #ffffff;
+  --primary-soft: #ece4f3;
+  --accent: #e9f5f4;
+  --accent-foreground: #1d4f4c;
+  --ring: #8a68a6;
+  --danger: #a8403f;
+  --danger-soft: #f8e3e2;
+  --success: #4e6312;
+  --success-soft: #f0f4dc;
+  --warning: #7a5a00;
+  --warning-soft: #fdf3d6;
+  --info: #1f5c59;
+  --info-soft: #e1f2f1;
+  --sidebar: #ffffff;
+  --shadow: 0 1px 2px rgb(31 26 38 / 0.06), 0 4px 16px rgb(31 26 38 / 0.05);
+}
+
+.dark {
+  --background: #141118;
+  --foreground: #eee9f3;
+  --card: #1d1923;
+  --card-foreground: #eee9f3;
+  --muted: #26212d;
+  --muted-foreground: #b2a9bd;
+  --border: #342d3d;
+  --input: #463d51;
+  --primary: #b99bd0;
+  --primary-foreground: #1a1320;
+  --primary-soft: #2f2639;
+  --accent: #1c2e2d;
+  --accent-foreground: #b8e3e1;
+  --ring: #b99bd0;
+  --danger: #ef9d9c;
+  --danger-soft: #3a2224;
+  --success: #d4e08f;
+  --success-soft: #2a2f1a;
+  --warning: #f8d983;
+  --warning-soft: #352d16;
+  --info: #9fd6d3;
+  --info-soft: #1b2e2d;
+  --sidebar: #19161e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.25);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-sidebar: var(--sidebar);
+  --color-brand-purple: var(--brand-purple);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-green: var(--brand-green);
+  --color-brand-yellow: var(--brand-yellow);
+  --color-brand-coral: var(--brand-coral);
+  --shadow-card: var(--shadow);
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-slide-up: slide-up 180ms ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "tnum" 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

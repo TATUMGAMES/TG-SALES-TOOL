@@ -1,0 +1,28 @@
+TG Sales CRM for Windows
+========================
+
+Install
+  1. Extract the whole ZIP to a folder you can write to, for example
+     C:\Users\<you>\Apps\tg_sales  (not inside Program Files).
+  2. Double-click launch.bat. The first start takes about a minute while the
+     private database is created. Your browser opens TG Sales CRM.
+  3. Keep the black tg_sales window open while you work. To quit, close it or
+     double-click stop.bat.
+
+Nothing else needs to be installed: the database (PostgreSQL) and everything
+tg_sales needs are in this folder. Your data is stored separately, in
+%LOCALAPPDATA%\TatumGames\tg_sales, so you can replace this folder with a new
+release at any time without losing anything.
+
+Windows may show "Windows protected your PC" the first time because the program
+is not signed yet. Check that the ZIP came from the official GitHub release and
+that its SHA256 matches SHA256SUMS.txt, then choose "More info" > "Run anyway".
+Do not turn off Windows security features.
+
+Update: stop tg_sales, extract the new release into a new folder (or replace
+this one), and start it with launch.bat. Your data is upgraded automatically
+after a backup.
+
+Help: see docs/USER_GUIDE.md and docs/TROUBLESHOOTING.md in the project, or
+send the log file from %LOCALAPPDATA%\TatumGames\tg_sales\logs to your support
+contact.

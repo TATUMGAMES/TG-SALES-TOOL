@@ -1,0 +1,53 @@
+# Builds the Windows release ZIP for a version tag (v1.2.3) and attaches it, with
+# SHA256SUMS.txt, to a draft GitHub Release. Runs only when a maintainer pushes a tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    permissions:
+      contents: write # create the draft release
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Check the tag matches the app version
+        shell: pwsh
+        run: |
+          $version = python -c "import sys; sys.path.insert(0, 'src'); import tg_sales; print(tg_sales.__version__)"
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match version $version" }
+      - name: Install (hash-verified) and PostgreSQL runtime
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install --require-hashes -r requirements-dev.lock
+          .venv\Scripts\python -m pip install --no-deps -e .
+          .venv\Scripts\python scripts\setup_postgres.py
+      - name: Tests (with the bundled PostgreSQL)
+        shell: pwsh
+        run: .venv\Scripts\python -m pytest
+      - name: Build
+        shell: pwsh
+        run: scripts\build_windows.ps1
+      - name: Smoke test the packaged app
+        shell: pwsh
+        run: scripts\smoke_test.ps1 -Folder (Get-ChildItem dist -Directory | Select-Object -First 1).FullName
+      - name: Draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          body_path: docs/RELEASE_NOTES.md

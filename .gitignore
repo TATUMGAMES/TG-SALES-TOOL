@@ -1,0 +1,266 @@
+# =============================================================================
+# tg_sales .gitignore
+#
+# This repository is PUBLIC. Never commit prospect lists, customer/contact
+# data, sales metrics, private company resources, credentials, or local
+# databases. Synthetic test fixtures under tests/fixtures/ are re-included at
+# the bottom of this file and must remain synthetic and clearly labeled.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Internal development planning files (local only, never published)
+# -----------------------------------------------------------------------------
+TASK_*.md
+TASKS_*.md
+docs/IMPLEMENTATION_STATUS.md
+docs/internal/
+
+# Portable runtimes downloaded by setup (PostgreSQL binaries, local clusters)
+/runtime/
+/pgdata/
+/postgres_data/
+
+# Local AI-assistant / agent workspace configuration
+.claude/
+.cursor/
+CLAUDE.local.md
+
+# -----------------------------------------------------------------------------
+# Local CRM databases and SQLite side files
+# -----------------------------------------------------------------------------
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# -----------------------------------------------------------------------------
+# Business data: imported prospect lists, contacts, exports, reports
+# -----------------------------------------------------------------------------
+# Spreadsheet and tabular data files (prospect lists, contact exports, chart
+# data). Synthetic fixtures are re-included at the end of this file.
+*.csv
+*.tsv
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.ods
+*.jsonl
+*.vcf
+
+# Generated reports
+*.pdf
+tg_sales_report_*
+
+# Local data directories (anchored to the repository root so that source
+# packages such as src/tg_sales/reports/ and src/tg_sales/sync/ are NOT ignored)
+/data/
+/imports/
+/import/
+/exports/
+/export/
+/reports/
+/prospects/
+/leads/
+/contacts/
+/customers/
+/user_data/
+/tg_sales_data/
+/portable_data/
+/attachments/
+/cache/
+
+# Offline synchronization packages
+tg_sales_sync_*.zip
+/sync_packages/
+/sync_exports/
+/sync_imports/
+
+# Dashboard snapshots and screenshots of real data
+# (synthetic documentation screenshots belong in docs/screenshots/)
+dashboard_snapshot_*.png
+/snapshots/
+/screenshots/
+Screenshot*.png
+Screen Shot*.png
+
+# Local backups
+/backups/
+/backup/
+*.bak
+*.backup
+*.db.bak
+*.sqlite.bak
+
+# Private company resources (data room, internal documents)
+/private/
+/private_resources/
+/resources_private/
+/data_room/
+/dataroom/
+/internal/
+/confidential/
+
+# -----------------------------------------------------------------------------
+# Credentials, secrets, keys, local settings
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+secrets.*
+*.secret
+*.secrets
+credentials.json
+*.credentials.json
+client_secret*.json
+service_account*.json
+token.json
+*.token
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.gpg
+*.asc
+id_rsa*
+id_ed25519*
+*.kdbx
+settings.local.*
+*.local.json
+*.local.toml
+*.local.ini
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+wheels/
+.installed.cfg
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+/env/
+ENV/
+
+# Test, type-check, lint and coverage caches
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.benchmarks/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+junit*.xml
+test-results/
+*.prof
+*.lprof
+
+# -----------------------------------------------------------------------------
+# Build and packaging output (PyInstaller, executables, release archives)
+# -----------------------------------------------------------------------------
+/build/
+/dist/
+/release/
+/out/
+*.exe
+*.msi
+*.msix
+*.dll
+tg_sales_windows_x64_*.zip
+SHA256SUMS*
+*.sha256
+warn-*.txt
+xref-*.html
+
+# -----------------------------------------------------------------------------
+# Web frontend (Node.js) dependencies, builds and browser-test output
+# -----------------------------------------------------------------------------
+node_modules/
+/web/dist/
+/web/coverage/
+/web/playwright-report/
+/web/test-results/
+/web/blob-report/
+/web/.e2e/
+/web/.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# PostgreSQL dumps (backups of private CRM data)
+*.dump
+*.sql.gz
+/db_dumps/
+/migration_reports/
+
+# -----------------------------------------------------------------------------
+# Logs and temporary files
+# -----------------------------------------------------------------------------
+*.log
+*.log.*
+/logs/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+~$*
+.~lock.*#
+/tmp/
+/temp/
+
+# -----------------------------------------------------------------------------
+# OS and IDE files
+# -----------------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.vscode/
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+.vs/
+
+# -----------------------------------------------------------------------------
+# Re-include SYNTHETIC test fixtures (must contain no real business data)
+# -----------------------------------------------------------------------------
+!tests/fixtures/**/*.csv
+!tests/fixtures/**/*.tsv
+!tests/fixtures/**/*.xlsx
+!tests/fixtures/**/*.xlsm
+!tests/fixtures/**/*.xls
+!tests/fixtures/**/*.jsonl
+!tests/fixtures/**/*.pdf
+!tests/fixtures/**/*.zip

@@ -1,0 +1,129 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tg_sales"
+description = "Tatum Games sales CRM and game-market sales intelligence (web app: FastAPI + PostgreSQL + React)."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Tatum Games" }]
+requires-python = ">=3.13,<3.14"
+dynamic = ["version"]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+]
+# Direct runtime dependencies. Exact, hash-verified versions are pinned in
+# requirements.lock (regenerate with scripts/lock_deps.ps1).
+dependencies = [
+    "fastapi>=0.118,<1",
+    "uvicorn>=0.37,<1",
+    "SQLAlchemy>=2.0.30,<3",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.11,<3",
+    "python-multipart>=0.0.20",
+    "cryptography>=46",
+    "pillow>=11.3",
+    "openpyxl>=3.1.3",
+    "httpx>=0.27",
+    "reportlab>=4.2",
+    "platformdirs>=4.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.140",
+    "pip-audit>=2.9",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pyinstaller>=6.10",
+    "pip-tools>=7.4",
+]
+
+[project.scripts]
+tg_sales = "tg_sales.launcher.main:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "tg_sales.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tg_sales = ["resources/**/*", "py.typed"]
+
+# ---------------------------------------------------------------------------
+# Ruff (lint + format)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "S",    # bandit security checks
+    "SIM",  # simplifications
+    "N",    # naming
+    "RUF",  # ruff-specific
+    "PTH",  # prefer pathlib
+    "DTZ",  # timezone-aware datetimes
+    "T20",  # no print statements
+]
+ignore = [
+    "N802",  # framework overrides use camelCase method names (e.g. ReportLab showPage)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+packages = ["tg_sales"]
+strict = true
+warn_unreachable = true
+pretty = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["openpyxl.*", "reportlab.*", "PIL.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+pythonpath = ["."]
+markers = [
+    "integration: tests that exercise multiple layers or real files/databases",
+]
+filterwarnings = ["error::DeprecationWarning:tg_sales.*"]
+
+[tool.coverage.run]
+source = ["tg_sales"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

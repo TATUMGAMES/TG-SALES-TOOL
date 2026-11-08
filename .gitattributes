@@ -1,0 +1,14 @@
+# Normalize line endings in the repository; Windows checkouts may use CRLF locally.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.xlsx binary
+*.db binary
+
+# Windows batch files must keep CRLF line endings (cmd.exe misreads labels otherwise).
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.dump binary
+*.zip binary
+*.woff2 binary

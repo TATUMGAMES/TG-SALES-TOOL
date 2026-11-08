@@ -1,0 +1,119 @@
+# Quality gates for every push and pull request. Nothing here publishes anything.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, types, tests on PostgreSQL)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18.4-trixie
+        env:
+          POSTGRES_USER: tg_admin
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tg_admin" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TG_SALES_TEST_DATABASE_URL: postgresql://tg_admin:ci-only-password@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: PostgreSQL 18 client tools (backup tests) and PDF fonts
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update && sudo apt-get install -y postgresql-client-18 fonts-dejavu-core
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - name: Install (hash-verified)
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install --no-deps -e .
+      - run: python -m ruff format --check src tests scripts
+      - run: python -m ruff check src tests scripts
+      - run: python -m mypy
+      - run: python scripts/generate_api_types.py --check
+      - run: python -m pytest
+      - name: Dependency audit
+        run: python -m pip_audit --strict -r requirements.lock
+
+  web:
+    name: Web (types, unit tests, build, audit)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --audit-level=moderate
+
+  e2e:
+    name: Browser tests (Playwright)
+    runs-on: ubuntu-24.04
+    needs: [backend, web]
+    services:
+      postgres:
+        image: postgres:18.4-trixie
+        env:
+          POSTGRES_USER: tg_admin
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tg_admin" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TG_SALES_TEST_DATABASE_URL: postgresql://tg_admin:ci-only-password@127.0.0.1:5432/postgres
+      TG_SALES_PYTHON: python
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: |
+          python -m pip install --require-hashes -r requirements.lock
+          python -m pip install --no-deps -e .
+          sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
+      - name: Build and run browser tests
+        working-directory: web
+        run: |
+          npm ci --no-fund
+          npx playwright install --with-deps chromium
+          npm run build
+          npm run e2e
+      - if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-results
+          path: web/test-results
+          retention-days: 7

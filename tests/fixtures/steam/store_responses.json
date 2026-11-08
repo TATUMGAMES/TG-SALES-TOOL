@@ -1,0 +1,95 @@
+{
+  "_note": "Synthetic fixture. Structure follows the public Steam storefront responses (/search/results?json=1, /api/featuredcategories, /api/appdetails) as observed in October 2026; every name, id, date, domain and address is invented.",
+  "search_comingsoon": {
+    "desc": "",
+    "items": [
+      {"name": "Lantern Tides", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100001/abc/capsule_sm_120.jpg?t=1"},
+      {"name": "Echo Vale Demo", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100004/def/capsule_sm_120.jpg?t=1"},
+      {"name": "Starfall Ledger", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100006/ghi/capsule_sm_120.jpg?t=1"},
+      {"name": "Lantern Tides", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100001/abc/capsule_sm_120.jpg?t=1"},
+      {"name": "No image", "logo": ""}
+    ]
+  },
+  "search_released": {
+    "desc": "",
+    "items": [
+      {"name": "Brass Orchard", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100002/jkl/capsule_sm_120.jpg?t=1"},
+      {"name": "Brass Orchard: Copper Fields", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100003/mno/capsule_sm_120.jpg?t=1"},
+      {"name": "Region Locked", "logo": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/100007/pqr/capsule_sm_120.jpg?t=1"}
+    ]
+  },
+  "featured": {
+    "coming_soon": {"items": [{"id": 100005, "name": "Echo Vale", "type": 0}]},
+    "new_releases": {"items": [{"id": 100002, "name": "Brass Orchard", "type": 0}]}
+  },
+  "appdetails": {
+    "100001": {"success": true, "data": {
+      "type": "game", "name": "Lantern Tides", "steam_appid": 100001,
+      "developers": ["Harbor Light Studio"], "publishers": ["Harbor Light Studio"],
+      "release_date": {"coming_soon": true, "date": "Nov 20, 2026"},
+      "website": "https://www.harborlight.example",
+      "support_info": {"url": "https://harborlight.example/support", "email": "Hello@HarborLight.example"},
+      "genres": [{"id": "23", "description": "Indie"}, {"id": "25", "description": "Adventure"}],
+      "categories": [{"id": 2, "description": "Single-player"}],
+      "platforms": {"windows": true, "mac": true, "linux": false},
+      "supported_languages": "English<strong>*</strong>, French, Japanese<br><strong>*</strong>languages with full audio support"
+    }},
+    "100002": {"success": true, "data": {
+      "type": "game", "name": "Brass Orchard", "steam_appid": 100002,
+      "developers": ["Copperleaf Games"], "publishers": ["Big Barrel Publishing", "Regional Partners KK"],
+      "release_date": {"coming_soon": false, "date": "15 Jul, 2026"},
+      "website": "http://copperleaf.example",
+      "support_info": {"url": "", "email": ""},
+      "genres": [{"id": "28", "description": "Simulation"}, {"id": "2", "description": "Strategy"}],
+      "categories": [{"id": 1, "description": "Multi-player"}],
+      "platforms": {"windows": true, "mac": false, "linux": false},
+      "supported_languages": "English, German"
+    }},
+    "100003": {"success": true, "data": {
+      "type": "dlc", "name": "Brass Orchard: Copper Fields", "steam_appid": 100003,
+      "developers": ["Copperleaf Games"], "publishers": ["Big Barrel Publishing"],
+      "release_date": {"coming_soon": false, "date": "Aug 2, 2026"},
+      "website": null,
+      "support_info": {"url": "", "email": ""},
+      "genres": [{"id": "28", "description": "Simulation"}],
+      "categories": [],
+      "platforms": {"windows": true, "mac": false, "linux": false},
+      "supported_languages": "English",
+      "fullgame": {"appid": "100002", "name": "Brass Orchard"}
+    }},
+    "100004": {"success": true, "data": {
+      "type": "demo", "name": "Echo Vale Demo", "steam_appid": 100004,
+      "developers": ["Quiet Owl Interactive"], "publishers": ["Quiet Owl Interactive"],
+      "release_date": {"coming_soon": false, "date": "Oct 1, 2026"},
+      "website": "https://quietowl.example",
+      "support_info": {"url": "", "email": ""},
+      "genres": [{"id": "1", "description": "Action"}],
+      "platforms": {"windows": true},
+      "supported_languages": "English",
+      "fullgame": {"appid": "100005", "name": "Echo Vale"}
+    }},
+    "100005": {"success": true, "data": {
+      "type": "game", "name": "Echo Vale", "steam_appid": 100005,
+      "developers": ["Quiet Owl Interactive"], "publishers": ["Quiet Owl Interactive"],
+      "release_date": {"coming_soon": true, "date": "To be announced"},
+      "website": "https://quietowl.example",
+      "support_info": {"url": "", "email": ""},
+      "genres": [{"id": "1", "description": "Action"}, {"id": "23", "description": "Indie"}],
+      "categories": [{"id": 2, "description": "Single-player"}],
+      "platforms": {"windows": true, "mac": false, "linux": true},
+      "supported_languages": "English, Spanish - Spain"
+    }},
+    "100006": {"success": true, "data": {
+      "type": "game", "name": "Starfall Ledger", "steam_appid": 100006,
+      "developers": ["Nova Forge Studios"], "publishers": ["Nova Forge Studios"],
+      "release_date": {"coming_soon": true, "date": "Q1 2027"},
+      "website": "https://novaforge.example",
+      "support_info": {"url": "", "email": "press@novaforge.example"},
+      "genres": [{"id": "2", "description": "Strategy"}],
+      "categories": [],
+      "platforms": {"windows": true, "mac": false, "linux": false},
+      "supported_languages": "English"
+    }},
+    "100007": {"success": false}
+  }
+}
