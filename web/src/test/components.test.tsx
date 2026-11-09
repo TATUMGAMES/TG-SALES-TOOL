@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -7,6 +19,8 @@ import { ErrorState } from "@/components/ui/misc";
 import { ApiError } from "@/lib/api";
 import { ProspectForm } from "@/features/prospects/ProspectForm";
 import { PipelinePage } from "@/features/pipeline/PipelinePage";
+import { LanesPanel } from "@/features/settings/LanesPanel";
+import { labelForKey } from "@/lib/lanes";
 import { INFO, mockApi, renderWithApp } from "./utils";
 
 const STAGES = [
@@ -27,6 +41,31 @@ const CARD = {
   next_action_note: "Send sample",
   release_date: null,
   closed: false,
+};
+const LANE = (key: string, name: string, extra: object = {}) => ({
+  id: `id-${key}`,
+  key,
+  name,
+  description: null,
+  color: "#86c4c2",
+  sort_order: 10,
+  technical_handoff: false,
+  archived: false,
+  opportunity_count: 0,
+  stage_count: 0,
+  in_use: false,
+  ...extra,
+});
+const LANES = [LANE("data_licensing", "Data licensing", { opportunity_count: 1, in_use: true, technical_handoff: true })];
+const BRANDING = {
+  company_name: "Acme Consulting",
+  display_name: "Acme Consulting",
+  default_company_name: "Tatum Games",
+  accent_color: null,
+  accent_text_color: null,
+  images: { logo: { present: false, media_type: null, version: null } },
+  requirements: "",
+  max_bytes: 5242880,
 };
 const META = {
   lanes: [{ value: "data_licensing", label: "Data licensing" }],
@@ -98,11 +137,14 @@ describe("pipeline", () => {
       "/api/pipeline/board": { stages: STAGES, cards: [CARD] },
       "/api/pipeline/meta": META,
       "/api/pipeline/stages": STAGES,
+      "/api/lanes": [LANE("data_licensing", "Licensing deals", { opportunity_count: 1, in_use: true })],
       "POST /api/opportunities/o1/move": { ok: true },
     });
     renderWithApp(<PipelinePage />, { route: "/pipeline" });
     expect(await screen.findByText("Pixel Forge")).toBeInTheDocument();
     expect(screen.getByText(/overdue/)).toBeInTheDocument(); // overdue stated in words
+    // Lane names come from the configured lanes (renamed here), never a built-in list.
+    expect((await screen.findAllByText("Licensing deals")).length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole("button", { name: "Move Pixel Forge" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Contacted" }));
@@ -126,6 +168,8 @@ describe("navigation", () => {
       "/api/periods": [],
       "/api/dashboard/salespeople": [],
       "/api/branding/logo": new Response(null, { status: 204 }),
+      "/api/branding": BRANDING,
+      "/api/lanes": LANES,
       "/api/dashboard": {
         period: { preset: "30d", label: "Last 30 days", start: "2026-09-21", end: "2026-10-20", description: "2026-09-21 to 2026-10-20" },
         previous: { preset: "custom", label: "Previous period", start: "2026-08-22", end: "2026-09-20", description: "" },
@@ -145,5 +189,33 @@ describe("navigation", () => {
     }
     expect(await screen.findByText("Your dashboard fills up as you work")).toBeInTheDocument();
     expect(await screen.findByText(/Signed in on this computer as Sam Seller/)).toBeInTheDocument();
+    // The company name comes from Settings > Branding.
+    expect(await screen.findByText("Acme Consulting")).toBeInTheDocument();
+  });
+});
+
+describe("sales lanes", () => {
+  it("lists lanes, protects lanes in use and archives on request", async () => {
+    const calls = mockApi({
+      "/api/lanes": [...LANES, LANE("sponsorships", "Sponsorships")],
+      "/api/lanes/presets": [{ key: "generic", label: "General" }],
+      "POST /api/lanes/data_licensing/archive": LANES[0],
+    });
+    renderWithApp(<LanesPanel />);
+    expect(await screen.findByText("Sponsorships")).toBeInTheDocument();
+    const rows = screen.getAllByRole("listitem");
+    const licensing = rows.find((row) => within(row).queryByText("Data licensing"))!;
+    const sponsorships = rows.find((row) => within(row).queryByText("Sponsorships"))!;
+    // A lane with records offers "Move records" instead of "Delete".
+    expect(within(licensing).queryByRole("button", { name: /Delete/ })).toBeNull();
+    expect(within(licensing).getByRole("button", { name: /Move records/ })).toBeInTheDocument();
+    expect(within(sponsorships).getByRole("button", { name: /Delete/ })).toBeInTheDocument();
+    await userEvent.click(within(licensing).getByRole("button", { name: /Archive/ }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/api/lanes/data_licensing/archive")?.body).toEqual({ archived: true }));
+  });
+
+  it("shows a readable name for a lane key without a lane", () => {
+    expect(labelForKey("colleague_lane")).toBe("Colleague lane");
+    expect(labelForKey("")).toBe("Unknown lane");
   });
 });

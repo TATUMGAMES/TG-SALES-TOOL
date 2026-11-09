@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "description": "TG Sales CRM web app (React + TypeScript).",
+  "license": "Apache-2.0",
+  "author": "Tatum Games, LLC",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

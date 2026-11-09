@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 <#
 .SYNOPSIS
     Run all local quality gates: backend formatting, lint, types and tests;
@@ -48,6 +58,7 @@ Invoke-Step 'ruff format --check' @('-m', 'ruff', 'format', '--check', 'src', 't
 Invoke-Step 'ruff check' @('-m', 'ruff', 'check', 'src', 'tests', 'scripts')
 Invoke-Step 'mypy' @('-m', 'mypy')
 Invoke-Step 'API types up to date' @('scripts\generate_api_types.py', '--check')
+Invoke-Step 'license headers' @('scripts\license_headers.py', '--check')
 Invoke-Step 'pytest' @('-m', 'pytest')
 Invoke-Npm 'web: type check' @('run', 'typecheck')
 Invoke-Npm 'web: unit tests' @('test')

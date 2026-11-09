@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Backups: create, verify, list, export, retention and restore-with-swap."""
 
 from __future__ import annotations
@@ -68,7 +78,7 @@ def test_create_verifies_and_describes_backup(manager: BackupManager, live: Data
     assert info.verified
     assert info.reason == "manual"
     assert info.table_counts["organizations"] == 1
-    assert info.schema_revision == "0001"
+    assert info.schema_revision == "0002"
     assert (manager.folder / info.name).is_file()
     assert not list(manager.folder.glob("*.partial"))
     assert [entry.name for entry in manager.list()] == [info.name]

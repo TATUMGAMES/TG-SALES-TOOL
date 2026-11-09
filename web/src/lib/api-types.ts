@@ -2,7 +2,7 @@
 
 export interface ActivityCount {
   actor_id: string | null;
-  lane: ProductLane | null;
+  lane: string | null;
   type: ActivityType;
   count: number;
 }
@@ -52,6 +52,10 @@ export interface AppSettings {
 
 export interface ApplyIn {
   resolutions?: Record<string, Record<string, string>>;
+}
+
+export interface ArchiveIn {
+  archived: boolean;
 }
 
 export interface ArchiveStage {
@@ -106,8 +110,34 @@ export interface Body_upload_api_imports_upload_post {
   file: string;
 }
 
+export interface Body_upload_branding_image_api_branding_images__slot__put {
+  image: string;
+}
+
 export interface Body_upload_logo_api_branding_logo_put {
   image: string;
+}
+
+export interface BrandImage {
+  present: boolean;
+  media_type: string | null;
+  version: string | null;
+}
+
+export interface BrandingIn {
+  company_name?: string | null;
+  accent_color?: string | null;
+}
+
+export interface BrandingView {
+  company_name: string | null;
+  display_name: string;
+  default_company_name: string;
+  accent_color: string | null;
+  accent_text_color: string | null;
+  images: Record<string, BrandImage>;
+  requirements: string;
+  max_bytes: number;
 }
 
 export type BucketSize = "day" | "week" | "month";
@@ -157,6 +187,7 @@ export interface ContactIn {
   notes?: string | null;
   provenance?: string | null;
   source_url?: string | null;
+  custom_fields?: Record<string, unknown>;
 }
 
 export interface ContactInfo {
@@ -171,6 +202,7 @@ export interface ContactInfo {
   source_url: string | null;
   source: RecordSource;
   archived: boolean;
+  custom_fields?: Record<string, unknown>;
 }
 
 export type ContactStatus_Input = "unknown" | "not_contacted" | "attempted" | "responded";
@@ -186,6 +218,42 @@ export interface Created {
 }
 
 export type CrmState = "not_in_crm" | "game_in_crm" | "studio_in_crm" | "possible_match";
+
+export interface CustomFieldEdit {
+  label: string;
+  description?: string | null;
+}
+
+export interface CustomFieldIn {
+  label: string;
+  field_type?: FieldType;
+  record_type?: RecordType;
+  description?: string | null;
+}
+
+export interface CustomFieldMeta {
+  field_types: Array<Choice>;
+  record_types: Array<Choice>;
+}
+
+export interface CustomFieldView {
+  id: string;
+  record_type: RecordType;
+  key: string;
+  label: string;
+  field_type: FieldType;
+  description: string | null;
+  sort_order: number;
+  archived: boolean;
+  target: string;
+}
+
+export interface CustomValue {
+  key: string;
+  label: string;
+  field_type: string;
+  value: unknown | null;
+}
 
 export interface DashboardData {
   report: KpiReport;
@@ -267,10 +335,15 @@ export interface FieldDiff {
   incoming: unknown;
 }
 
+export type FieldType = "text" | "number" | "date" | "url" | "boolean";
+
 export interface FieldView {
   field: string;
   label: string;
   multiple: boolean;
+  group?: string;
+  value_type?: string;
+  custom?: boolean;
 }
 
 export interface FiltersIn {
@@ -393,7 +466,7 @@ export interface Health {
   database: string;
 }
 
-export type ImportField = "organization_name" | "website" | "organization_type" | "location" | "country" | "tags" | "organization_notes" | "contact_name" | "contact_first_name" | "contact_last_name" | "role_title" | "email" | "linkedin" | "twitter" | "social" | "contacted" | "contact_notes" | "game_title" | "release_date" | "platform" | "store_url";
+export type ImageSlot = "logo" | "compact_logo" | "favicon";
 
 export interface ImportHistoryEntry {
   id: string;
@@ -466,7 +539,7 @@ export interface JobView {
 
 export interface KpiFilters {
   actor_id?: string | null;
-  lane?: ProductLane | null;
+  lane?: string | null;
 }
 
 export interface KpiReport {
@@ -482,6 +555,39 @@ export interface KpiReport {
   transitions?: Array<StageTransition>;
   activity_counts?: Array<ActivityCount>;
   quality?: DataQuality;
+}
+
+export interface LaneArchive {
+  archived: boolean;
+}
+
+export interface LaneIn {
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  technical_handoff?: boolean;
+}
+
+export interface LaneMove {
+  target_key: string;
+}
+
+export interface LaneOrder {
+  keys: Array<string>;
+}
+
+export interface LaneView {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  sort_order: number;
+  technical_handoff: boolean;
+  archived: boolean;
+  opportunity_count: number;
+  stage_count: number;
+  in_use: boolean;
 }
 
 export interface LeadContactIn {
@@ -534,7 +640,7 @@ export interface LookupIn {
 
 export interface MappingIn {
   column: number;
-  field: ImportField | null;
+  field?: string | null;
 }
 
 export type MatchStrength = "strong" | "name" | "similar";
@@ -560,6 +666,12 @@ export interface MoveIn {
   reason_note?: string | null;
 }
 
+export interface MoveResult {
+  opportunities: number;
+  stages: number;
+  backup: string | null;
+}
+
 export interface NameIn {
   display_name: string;
 }
@@ -583,7 +695,7 @@ export interface OpportunityCard {
   organization_id: string;
   organization_name: string;
   title: string | null;
-  product_lane: ProductLane;
+  product_lane: string;
   stage_id: string;
   owner_name: string | null;
   last_activity_at: string | null;
@@ -623,7 +735,7 @@ export interface OpportunityEditIn {
 
 export interface OpportunityIn {
   organization_id: string;
-  product_lane: ProductLane;
+  product_lane: string;
   stage_id: string;
   title?: string | null;
   owner_actor_id?: string | null;
@@ -637,7 +749,7 @@ export interface OpportunityIn {
 export interface OpportunityInfo {
   id: string;
   title: string | null;
-  product_lane: ProductLane;
+  product_lane: string;
   stage_name: string;
   next_action_at: string | null;
   next_action_note: string | null;
@@ -669,6 +781,10 @@ export interface OrganizationDetail {
   opportunities: Array<OpportunityInfo>;
   timeline: Array<TimelineEntry>;
   links: Array<LinkInfo>;
+  reviewed_on?: string | null;
+  qualification_source_url?: string | null;
+  custom_fields?: Array<CustomValue>;
+  contact_fields?: Array<CustomValue>;
 }
 
 export interface OrganizationIn {
@@ -679,6 +795,9 @@ export interface OrganizationIn {
   country?: string | null;
   tags?: Array<string>;
   notes?: string | null;
+  reviewed_on?: string | null;
+  qualification_source_url?: string | null;
+  custom_fields?: Record<string, unknown>;
 }
 
 export interface OrganizationSummary {
@@ -750,6 +869,7 @@ export interface PipelineMeta {
 export interface PlanIn {
   mappings: Array<MappingIn>;
   date_order?: DateOrder;
+  overwrite?: boolean;
 }
 
 export interface PlaybookMeta {
@@ -771,6 +891,11 @@ export interface PossibleDuplicate {
   reason: string;
 }
 
+export interface PresetView {
+  key: string;
+  label: string;
+}
+
 export interface PreviewIn {
   organization_id?: string | null;
   contact_id?: string | null;
@@ -789,8 +914,6 @@ export interface PreviewView {
   default_game_id: string | null;
 }
 
-export type ProductLane = "data_licensing" | "publisher_partnership" | "mikros_marketing";
-
 export interface ReadIn {
   sheet?: string | null;
 }
@@ -805,6 +928,8 @@ export interface RecentActivity {
 }
 
 export type RecordSource = "manual" | "import" | "discovery" | "sync" | "system";
+
+export type RecordType = "prospect" | "contact";
 
 export type ReleasePrecision = "day" | "month" | "quarter" | "year" | "unknown";
 
@@ -829,7 +954,7 @@ export interface ReportIn {
   start?: string | null;
   end?: string | null;
   actor_id?: string | null;
-  lane?: ProductLane | null;
+  lane?: string | null;
   include_html?: boolean;
 }
 
@@ -942,7 +1067,7 @@ export interface StageEdit {
 export interface StageIn {
   name: string;
   outcome?: StageOutcome;
-  lane?: ProductLane | null;
+  lane?: string | null;
   after_stage_id?: string | null;
 }
 
@@ -950,7 +1075,7 @@ export interface StageInfo {
   id: string;
   name: string;
   sort_order: number;
-  product_lane: ProductLane | null;
+  product_lane: string | null;
   outcome: StageOutcome;
   archived: boolean;
   opportunity_count?: number;

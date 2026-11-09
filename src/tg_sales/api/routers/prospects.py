@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Prospects (organizations), contacts, games, notes, tags, duplicates and CSV export."""
 
 from __future__ import annotations
@@ -6,7 +16,7 @@ import tempfile
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import FileResponse
@@ -43,8 +53,19 @@ class OrganizationIn(Body):
     country: str | None = Field(default=None, max_length=100)
     tags: list[str] = Field(default_factory=list, max_length=50)
     notes: str | None = Field(default=None, max_length=10_000)
+    reviewed_on: date | None = None
+    qualification_source_url: str | None = Field(default=None, max_length=4000)
+    # Changes by custom field key; null clears a value. Fields not listed keep their values.
+    custom_fields: dict[str, Any] = Field(default_factory=dict, max_length=200)
 
     def draft(self) -> OrganizationDraft:
+        # Fields the client did not send keep their stored values (older clients,
+        # simple forms), so an edit never erases information it did not show.
+        keep = frozenset(
+            name
+            for name in ("reviewed_on", "qualification_source_url")
+            if name not in self.model_fields_set
+        )
         return OrganizationDraft(
             self.name,
             website=self.website or None,
@@ -53,6 +74,10 @@ class OrganizationIn(Body):
             country=self.country or None,
             tags=tuple(t for t in (tag.strip() for tag in self.tags) if t),
             notes=self.notes or None,
+            reviewed_on=self.reviewed_on,
+            qualification_source_url=self.qualification_source_url or None,
+            custom_fields=dict(self.custom_fields),
+            keep=keep,
         )
 
 
@@ -65,8 +90,14 @@ class ContactIn(Body):
     notes: str | None = Field(default=None, max_length=10_000)
     provenance: str | None = Field(default=None, max_length=500)
     source_url: str | None = Field(default=None, max_length=500)
+    custom_fields: dict[str, Any] = Field(default_factory=dict, max_length=200)
 
     def draft(self) -> ContactDraft:
+        keep = frozenset(
+            name
+            for name in ("provenance", "source_url", "social_urls")
+            if name not in self.model_fields_set
+        )
         return ContactDraft(
             name=self.name or None,
             role_title=self.role_title or None,
@@ -76,6 +107,8 @@ class ContactIn(Body):
             notes=self.notes or None,
             provenance=self.provenance or None,
             source_url=self.source_url or None,
+            custom_fields=dict(self.custom_fields),
+            keep=keep,
         )
 
 

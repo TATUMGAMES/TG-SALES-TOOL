@@ -23,7 +23,7 @@ RUN apt-get update \
  && apt-get purge -y curl gnupg && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 tgsales
 WORKDIR /app
-COPY requirements.lock pyproject.toml README.md LICENSE ./
+COPY requirements.lock pyproject.toml README.md LICENSE NOTICE TRADEMARKS.md ./
 RUN pip install --require-hashes -r requirements.lock
 COPY src/ src/
 RUN pip install --no-deps .

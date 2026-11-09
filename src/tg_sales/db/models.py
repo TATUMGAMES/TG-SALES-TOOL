@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """SQLAlchemy models for the tg_sales database.
 
 Every table carries the same bookkeeping columns (see :class:`EntityMixin`):
@@ -43,7 +53,6 @@ from tg_sales.domain.enums import (
     ContactStatus,
     GameRole,
     OrganizationType,
-    ProductLane,
     RecordSource,
     ReleasePrecision,
     SettingScope,
@@ -59,6 +68,7 @@ NAMING_CONVENTION = {
 }
 
 ID_LENGTH = 36
+LANE_KEY_LENGTH = 32  # sales_lanes.key, stored in opportunities/pipeline_stages.product_lane
 NOT_DELETED = text("deleted_at_utc IS NULL")
 
 
@@ -150,6 +160,13 @@ class Organization(EntityMixin, Base):
     tags: Mapped[list[str]] = mapped_column(default=list)
     notes: Mapped[str | None]
     archived_at_utc: Mapped[datetime | None]
+    # When the prospect was last reviewed (qualified, researched); not a contact date.
+    reviewed_on: Mapped[date | None] = mapped_column(Date())
+    # Where the prospect was found or qualified (kept exactly, including the query string).
+    # Separate from ``source``, which says how the record entered the CRM.
+    qualification_source_url: Mapped[str | None]
+    # Values of user-defined fields (see CustomField), keyed by the field's ``key``.
+    custom_fields: Mapped[dict[str, Any]] = mapped_column(default=dict)
 
 
 class Contact(EntityMixin, Base):
@@ -172,6 +189,7 @@ class Contact(EntityMixin, Base):
         enum_column(RecordSource), default=RecordSource.MANUAL
     )
     archived_at_utc: Mapped[datetime | None]
+    custom_fields: Mapped[dict[str, Any]] = mapped_column(default=dict)
 
 
 class Game(EntityMixin, Base):
@@ -227,7 +245,8 @@ class PipelineStage(EntityMixin, Base):
 
     name: Mapped[str]
     sort_order: Mapped[int] = mapped_column(Integer())
-    product_lane: Mapped[ProductLane | None] = mapped_column(enum_column(ProductLane))
+    # Key of the sales lane this stage is limited to; None: shared by all lanes.
+    product_lane: Mapped[str | None] = mapped_column(String(LANE_KEY_LENGTH))
     outcome: Mapped[StageOutcome] = mapped_column(
         enum_column(StageOutcome), default=StageOutcome.OPEN
     )
@@ -236,6 +255,49 @@ class PipelineStage(EntityMixin, Base):
     @property
     def is_terminal(self) -> bool:
         return self.outcome.is_terminal
+
+
+class SalesLane(EntityMixin, Base):
+    """A business category of opportunities (for example "Consulting"), set up by the user.
+
+    ``key`` is the stable identifier stored in ``opportunities.product_lane`` and
+    ``pipeline_stages.product_lane``; it never changes, so renaming a lane keeps
+    every record and its history. The ``id`` is derived from the key, so the
+    same lane created on two computers is one record after sync. Lanes are
+    archived rather than deleted; only a lane no record uses can be deleted.
+    """
+
+    __tablename__ = "sales_lanes"
+    __table_args__ = (Index("uq_sales_lanes_key", "key", unique=True),)
+
+    key: Mapped[str] = mapped_column(String(LANE_KEY_LENGTH))
+    name: Mapped[str]
+    description: Mapped[str | None]
+    color: Mapped[str | None] = mapped_column(String(16))
+    sort_order: Mapped[int] = mapped_column(Integer())
+    # Offers the technical-review handoff summary on its opportunities.
+    technical_handoff: Mapped[bool] = mapped_column(Boolean(), default=False)
+    archived_at_utc: Mapped[datetime | None]
+
+
+class CustomField(EntityMixin, Base):
+    """A user-defined field for prospects or contacts (for example "Account tier").
+
+    Values are stored in the record's ``custom_fields`` JSON under ``key``,
+    which never changes (the label can be renamed). Archived fields are hidden
+    from forms and imports but their values are kept.
+    """
+
+    __tablename__ = "custom_fields"
+    __table_args__ = (Index("uq_custom_fields_record_type_key", "record_type", "key", unique=True),)
+
+    record_type: Mapped[str] = mapped_column(String(16))
+    key: Mapped[str] = mapped_column(String(64))
+    label: Mapped[str]
+    field_type: Mapped[str] = mapped_column(String(16))
+    description: Mapped[str | None]
+    sort_order: Mapped[int] = mapped_column(Integer())
+    archived_at_utc: Mapped[datetime | None]
 
 
 class Opportunity(EntityMixin, Base):
@@ -253,7 +315,8 @@ class Opportunity(EntityMixin, Base):
     )
 
     organization_id: Mapped[str] = fk_column("organizations.id", nullable=False)
-    product_lane: Mapped[ProductLane] = mapped_column(enum_column(ProductLane))
+    # Key of the opportunity's sales lane (``sales_lanes.key``; stable across renames).
+    product_lane: Mapped[str] = mapped_column(String(LANE_KEY_LENGTH))
     stage_id: Mapped[str] = fk_column("pipeline_stages.id", nullable=False)
     owner_actor_id: Mapped[str | None] = fk_column("actors.id", nullable=True)
     title: Mapped[str | None]
@@ -649,6 +712,8 @@ SYNCED_TABLES: tuple[str, ...] = (
     "playbook_outcomes",
     "settings",
     "resource_links",
+    "sales_lanes",
+    "custom_fields",
 )
 
 
@@ -659,6 +724,8 @@ ENTITY_MODELS: tuple[type[EntityMixin], ...] = (
     Game,
     GameOrganization,
     PipelineStage,
+    SalesLane,
+    CustomField,
     Opportunity,
     Task,
     Activity,

@@ -88,12 +88,41 @@ entry in `SYNCED_TABLES`.
 ## Quality gate
 
 ```powershell
-powershell -File scripts\check.ps1          # ruff, mypy (strict), API types, pytest, tsc, vitest, build
+powershell -File scripts\check.ps1          # ruff, mypy (strict), API types, license headers, pytest, tsc, vitest, build
 powershell -File scripts\check.ps1 -E2E     # plus Playwright browser tests
 powershell -File scripts\check.ps1 -Audit   # plus pip-audit and npm audit (internet)
 ```
 
 See [TESTING.md](TESTING.md).
+
+## License headers
+
+Original source files (Python, TypeScript/TSX, JavaScript, CSS, PowerShell)
+start with the Apache 2.0 copyright header. New files get it with:
+
+```powershell
+.venv\Scripts\python scripts\license_headers.py          # add missing headers
+.venv\Scripts\python scripts\license_headers.py --check  # what CI runs
+```
+
+Generated files (`web/src/lib/api-types.ts`), fixture data and third-party
+files are skipped; a file that already has a copyright or license notice is
+never changed. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Configurable lanes, custom fields and branding (for contributors)
+
+- **Lanes** are rows of `sales_lanes`. Records store the lane's permanent
+  `key` (`opportunities.product_lane`), never its name, so renaming is free.
+  Read lane names through `LaneService.names()` / the `/api/lanes` endpoint
+  (frontend: `useLanes()` in `web/src/lib/lanes.ts`); never hard-code lane
+  keys. `ProductLane` in `domain/enums.py` only names the original Tatum Games
+  keys for the preset.
+- **Custom fields** are defined in `custom_fields`; values live in the
+  `custom_fields` JSON column of `organizations` and `contacts`, validated by
+  `domain/custom_fields.py` for forms and imports alike.
+- **Branding** (`services/branding.py`) is per installation: a device-scoped
+  setting plus images in the data folder's `assets` directory. The product
+  name "TG Sales CRM" and the license notices are not part of branding.
 
 ## Dependencies
 
@@ -108,6 +137,7 @@ See [TESTING.md](TESTING.md).
 |--------|---------|
 | `scripts\setup_postgres.py` | Download/verify/unpack portable PostgreSQL |
 | `scripts\generate_api_types.py` | `docs/API.md` and `web/src/lib/api-types.ts` from the API |
+| `scripts\license_headers.py` | Add or check Apache 2.0 headers in source files |
 | `scripts\make_web_icons.py` | PWA icons |
 | `scripts\benchmark_kpis.py` | Dashboard and search timings on 100k contacts / 500k activities |
 | `scripts\build_windows.ps1` | Release folder and ZIP |

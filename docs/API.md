@@ -37,6 +37,16 @@ not edit by hand. The web app and any future mobile app use this API.
 | `DELETE` | `/api/sync/import/{token}` | Discard Import |
 | `POST` | `/api/sync/import/{token}/apply` | Apply Import |
 
+## Custom-fields
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/custom-fields` | List Fields |
+| `POST` | `/api/custom-fields` | Create Field |
+| `GET` | `/api/custom-fields/meta` | Meta |
+| `PUT` | `/api/custom-fields/{field_id}` | Update Field |
+| `POST` | `/api/custom-fields/{field_id}/archive` | Archive Field |
+
 ## Dashboard
 
 | Method | Path | Purpose |
@@ -65,7 +75,7 @@ not edit by hand. The web app and any future mobile app use this API.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/imports/fields` | Fields |
+| `GET` | `/api/imports/fields` | Every field a column can be imported into: built-in fields, then active custom fields. |
 | `GET` | `/api/imports/history` | History |
 | `POST` | `/api/imports/history/{job_id}/undo` | Undo |
 | `POST` | `/api/imports/upload` | Upload |
@@ -76,6 +86,20 @@ not edit by hand. The web app and any future mobile app use this API.
 | `POST` | `/api/imports/{session_id}/preview` | Preview |
 | `GET` | `/api/imports/{session_id}/problems.csv` | Problems Csv |
 | `POST` | `/api/imports/{session_id}/read` | Read |
+
+## Lanes
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/lanes` | Lanes |
+| `POST` | `/api/lanes` | Create Lane |
+| `PUT` | `/api/lanes/order` | Reorder Lanes |
+| `GET` | `/api/lanes/presets` | Presets |
+| `POST` | `/api/lanes/presets/{preset}` | Apply Preset |
+| `PUT` | `/api/lanes/{key}` | Update Lane |
+| `DELETE` | `/api/lanes/{key}` | Delete Lane |
+| `POST` | `/api/lanes/{key}/archive` | Archive Lane |
+| `POST` | `/api/lanes/{key}/move` | Move Lane Records |
 
 ## Pipeline
 
@@ -162,10 +186,16 @@ not edit by hand. The web app and any future mobile app use this API.
 
 | Method | Path | Purpose |
 |---|---|---|
+| `GET` | `/api/branding` | Branding |
+| `PATCH` | `/api/branding` | Update Branding |
+| `GET` | `/api/branding/images/{slot}` | Branding Image |
+| `PUT` | `/api/branding/images/{slot}` | Upload Branding Image |
+| `DELETE` | `/api/branding/images/{slot}` | Remove Branding Image |
 | `GET` | `/api/branding/logo` | Logo |
 | `PUT` | `/api/branding/logo` | Upload Logo |
 | `DELETE` | `/api/branding/logo` | Remove Logo |
 | `GET` | `/api/branding/logo/info` | Logo Info |
+| `POST` | `/api/branding/reset` | Reset Branding |
 | `GET` | `/api/me` | Me |
 | `PUT` | `/api/me` | Set Name |
 | `GET` | `/api/resources` | Resources |

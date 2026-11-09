@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 /// <reference types="vitest/config" />
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
@@ -19,7 +31,7 @@ export default defineConfig({
       manifest: {
         name: "TG Sales CRM",
         short_name: "TG Sales",
-        description: "Tatum Games sales CRM and game-market intelligence.",
+        description: "A customizable, self-hosted sales CRM: prospects, pipeline, imports, reports and game-market discovery.",
         theme_color: "#6f4f8a",
         background_color: "#f7f5fa",
         display: "standalone",

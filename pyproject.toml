@@ -4,14 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tg_sales"
-description = "Tatum Games sales CRM and game-market sales intelligence (web app: FastAPI + PostgreSQL + React)."
+description = "TG Sales CRM: a customizable, self-hosted sales CRM (FastAPI + PostgreSQL + React) by Tatum Games."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "Tatum Games" }]
+authors = [{ name = "Tatum Games, LLC" }]
 requires-python = ">=3.13,<3.14"
 dynamic = ["version"]
 classifiers = [
+    # Not published to PyPI; installed from source or the Windows release.
     "Private :: Do Not Upload",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.13",
     "Operating System :: Microsoft :: Windows",
     "Environment :: Web Environment",

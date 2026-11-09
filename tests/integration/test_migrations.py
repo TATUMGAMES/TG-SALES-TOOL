@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """PostgreSQL schema migrations: creation, upgrade safety, refusal of unknown databases."""
 
 from __future__ import annotations
@@ -30,7 +40,7 @@ from tg_sales.domain.stages import DEFAULT_STAGES
 
 pytestmark = pytest.mark.integration
 
-HEAD = "0001"
+HEAD = "0002"
 
 EXTRA_REVISION = f'''"""Test-only revision adding a column."""
 
@@ -114,8 +124,9 @@ def test_default_stages_seeded_with_shared_ids(database: Database) -> None:
         assert {s.created_by_device_id for s in stages} == {"00000000-0000-0000-0000-000000000000"}
 
 
-def test_seeded_stages_have_no_change_history(database: Database) -> None:
-    # Identical on every computer, so they must not look like local edits.
+def test_seeded_stages_have_no_change_history(make_database: Callable[..., Database]) -> None:
+    # Seeded stages and lanes are identical on every computer: not local edits.
+    database = make_database(lane_preset=None)
     with database.engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM change_log")) == 0
 

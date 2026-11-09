@@ -83,6 +83,12 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 - Backups are stored in the `appdata` volume (`/data/backups`). Restore needs
   an administrator database URL (`TG_SALES_ADMIN_DATABASE_URL`); without it
   the app offers download only.
+- Branding images uploaded in Settings › Branding are stored in the
+  `appdata` volume (`/data/assets`), and the branding settings in the
+  database, so they survive `docker compose down`/`up` and image rebuilds.
+  Removing the volumes (`down -v`) removes them, like all data. Backups contain
+  the database only: copy `/data/assets` too if you want the images in a
+  backup.
 
 > Status: the compose file and Dockerfile are written and their image tags
 > verified, but they could not be run on the development computer (no

@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """PostgreSQL baseline schema.
 
 All tables, partial unique indexes, deferrable foreign keys, the activity
@@ -19,7 +29,6 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 import tg_sales.db.types
-from tg_sales.db.models import SYNCED_TABLES
 
 revision: str = "0001"
 down_revision: str | None = None
@@ -27,6 +36,25 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 SYSTEM_DEVICE_ID = "00000000-0000-0000-0000-000000000000"
+# The synchronized tables as they existed at this revision. Frozen here (not
+# imported from the models) so later revisions that add synchronized tables do
+# not change what this baseline creates.
+SYNCED_TABLES: tuple[str, ...] = (
+    "actors",
+    "organizations",
+    "contacts",
+    "games",
+    "game_organizations",
+    "pipeline_stages",
+    "opportunities",
+    "tasks",
+    "activities",
+    "playbook_templates",
+    "playbook_revisions",
+    "playbook_outcomes",
+    "settings",
+    "resource_links",
+)
 SEED_TIMESTAMP = datetime(2026, 1, 1, tzinfo=UTC)
 # (id, name, sort_order, outcome); ids are uuid5(TG_SALES_NAMESPACE, "pipeline_stage:<key>").
 DEFAULT_STAGES = [

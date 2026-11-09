@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Opportunities, stages and logged interactions: data passed to the UI and rules.
 
 Logged interactions record what a salesperson reports having done. tg_sales
@@ -10,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from tg_sales.domain.enums import ActivityType, ContactStatus, ProductLane, StageOutcome
+from tg_sales.domain.enums import ActivityType, ContactStatus, StageOutcome
 
 MAX_STAGE_NAME_LENGTH = 60
 
@@ -115,7 +125,7 @@ class StageInfo:
     id: str
     name: str
     sort_order: int
-    product_lane: ProductLane | None
+    product_lane: str | None  # lane key; None: every lane
     outcome: StageOutcome
     archived: bool
     opportunity_count: int = 0
@@ -124,8 +134,8 @@ class StageInfo:
     def is_terminal(self) -> bool:
         return self.outcome.is_terminal
 
-    def applies_to(self, lane: ProductLane | None) -> bool:
-        return lane is None or self.product_lane is None or self.product_lane is lane
+    def applies_to(self, lane: str | None) -> bool:
+        return lane is None or self.product_lane is None or self.product_lane == lane
 
 
 @dataclass(frozen=True)
@@ -134,7 +144,7 @@ class OpportunityCard:
     organization_id: str
     organization_name: str
     title: str | None
-    product_lane: ProductLane
+    product_lane: str  # sales lane key
     stage_id: str
     owner_name: str | None
     last_activity_at: datetime | None
@@ -159,7 +169,7 @@ class Board:
 @dataclass(frozen=True)
 class OpportunityDraft:
     organization_id: str
-    product_lane: ProductLane
+    product_lane: str  # sales lane key
     stage_id: str
     title: str | None = None
     owner_actor_id: str | None = None

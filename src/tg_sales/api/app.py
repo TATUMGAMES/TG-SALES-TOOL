@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """The FastAPI application: API routes under ``/api`` plus the built web app.
 
 The compiled React app (``web/dist``) is served from the same origin, so the
@@ -22,9 +32,11 @@ from tg_sales import __version__
 from tg_sales.api.context import AppContext
 from tg_sales.api.routers import (
     collaboration,
+    custom_fields,
     dashboard,
     discovery,
     imports,
+    lanes,
     pipeline,
     playbook,
     prospects,
@@ -77,6 +89,7 @@ def create_app(context: AppContext, *, start_scheduler: bool = False) -> FastAPI
         system,
         prospects,
         imports,
+        lanes,
         pipeline,
         dashboard,
         discovery,
@@ -84,6 +97,7 @@ def create_app(context: AppContext, *, start_scheduler: bool = False) -> FastAPI
         reports,
         collaboration,
         settings,
+        custom_fields,
     ):
         app.include_router(module.router, prefix="/api")
 

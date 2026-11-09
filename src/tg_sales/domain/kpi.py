@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Sales KPIs computed from the activity ledger (see docs/KPI_DICTIONARY.md).
 
 Every function here is pure: it receives plain data loaded by
@@ -27,10 +37,10 @@ from enum import StrEnum
 from tg_sales.domain.enums import (
     OUTREACH_ACTIVITY_TYPES,
     ActivityType,
-    ProductLane,
     RecordSource,
     StageOutcome,
 )
+from tg_sales.domain.lanes import label_for_key
 from tg_sales.domain.periods import DateRange
 
 STAGE_TYPES = frozenset({ActivityType.OPPORTUNITY_CREATED, ActivityType.STAGE_CHANGE})
@@ -127,7 +137,7 @@ def bucket_index(buckets: Sequence[Bucket], moment: datetime) -> int | None:
 @dataclass(frozen=True)
 class KpiFilters:
     actor_id: str | None = None  # salesperson
-    lane: ProductLane | None = None
+    lane: str | None = None  # sales lane key
 
 
 @dataclass(frozen=True)
@@ -202,7 +212,7 @@ class OpportunityRow:
     id: str
     organization_id: str
     title: str | None
-    lane: ProductLane
+    lane: str
     owner_actor_id: str | None
     deleted_at: datetime | None
     next_action_at: datetime | None
@@ -318,7 +328,7 @@ class ActivityCount:
     """Logged ledger events in the period by salesperson, product lane and type."""
 
     actor_id: str | None
-    lane: ProductLane | None  # None: not linked to an opportunity
+    lane: str | None  # lane key; None: not linked to an opportunity
     type: ActivityType
     count: int
 
@@ -376,7 +386,7 @@ def _live(deleted_at: datetime | None, moment: datetime) -> bool:
 def _opportunity_matches(opp: OpportunityRow | None, filters: KpiFilters) -> bool:
     if opp is None:
         return False
-    if filters.lane is not None and opp.lane is not filters.lane:
+    if filters.lane is not None and opp.lane != filters.lane:
         return False
     return filters.actor_id is None or opp.owner_actor_id == filters.actor_id
 
@@ -390,7 +400,7 @@ def _activity_matches(
     if filters.lane is None:
         return True
     opp = opportunities.get(event.opportunity_id or "")
-    return opp is not None and opp.lane is filters.lane
+    return opp is not None and opp.lane == filters.lane
 
 
 def _event_outcome(event: LedgerEvent, stages: Mapping[str, StageRow]) -> StageOutcome | None:
@@ -405,7 +415,7 @@ def _org(data: KpiInput, organization_id: str | None) -> str:
 
 
 def _opp_label(opp: OpportunityRow) -> str:
-    return opp.title or opp.lane.value.replace("_", " ").capitalize()
+    return opp.title or label_for_key(opp.lane)
 
 
 def _plural(count: int, word: str) -> str:
@@ -652,9 +662,7 @@ def compute(data: KpiInput) -> KpiReport:
     for opp_id, event in stages_at(data.stage_events, p0 - timedelta(microseconds=1)).items():
         if opp_id in opportunities:
             at_start[event.stage_id or ""] += 1
-    activity_counts: dict[tuple[str | None, ProductLane | None, ActivityType], int] = defaultdict(
-        int
-    )
+    activity_counts: dict[tuple[str | None, str | None, ActivityType], int] = defaultdict(int)
     for event in activity:
         opp = opportunities.get(event.opportunity_id or "")
         activity_counts[(event.actor_id, opp.lane if opp else None, event.type)] += 1

@@ -1,18 +1,32 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArchiveRestore, ExternalLink, Gamepad2, KanbanSquare, Mail, MessageSquarePlus, Pencil, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Badge, Card, Dot, LANE_COLORS } from "@/components/ui/card";
+import { Badge, Card, Dot } from "@/components/ui/card";
 import { Dialog, Sheet } from "@/components/ui/dialog";
 import { Field, Input, NativeSelect, Textarea } from "@/components/ui/form";
 import { ErrorState, LoadingRows, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/misc";
 import { api } from "@/lib/api";
-import type { ContactInfo, OrganizationDetail } from "@/lib/api-types";
+import type { ContactInfo, CustomValue, OrganizationDetail } from "@/lib/api-types";
 import { formatDate, formatDateTime, humanize, relativeDue } from "@/lib/format";
 import { showError, useAction } from "@/lib/hooks";
-import { CONTACT_STATUS_LABELS, LANE_LABELS, ORGANIZATION_TYPE_LABELS, type ContactStatus } from "@/lib/types";
+import { useLanes } from "@/lib/lanes";
+import { CONTACT_STATUS_LABELS, ORGANIZATION_TYPE_LABELS, type ContactStatus } from "@/lib/types";
 import { NewOpportunityDialog } from "../pipeline/NewOpportunityDialog";
+import { changedValues, CustomFieldInputs, CustomValueText, type CustomDraft, draftFromValues } from "./CustomFieldInputs";
 import { ProspectForm } from "./ProspectForm";
 
 const STATUS_TONE: Record<ContactStatus, "neutral" | "warning" | "success" | "info"> = {
@@ -27,13 +41,17 @@ function ContactDialog({
   onOpenChange,
   organizationId,
   contact,
+  fields = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   organizationId: string;
   contact?: ContactInfo | undefined;
+  fields?: CustomValue[];
 }) {
   const client = useQueryClient();
+  const [customOriginal] = useState<CustomDraft>(() => draftFromValues(fields, contact?.custom_fields ?? {}));
+  const [custom, setCustom] = useState<CustomDraft>(customOriginal);
   const [values, setValues] = useState({
     name: contact?.name ?? "",
     role_title: contact?.role_title ?? "",
@@ -60,13 +78,18 @@ function ContactDialog({
           return;
         }
       }
+      // Keep the contact's other social links; only LinkedIn is edited here.
+      const socials: Record<string, string> = { ...(contact?.social_urls ?? {}) };
+      if (values.linkedin) socials.linkedin = values.linkedin;
+      else delete socials.linkedin;
       const body = {
         name: values.name || null,
         role_title: values.role_title || null,
         email: values.email || null,
-        social_urls: values.linkedin ? { linkedin: values.linkedin } : {},
+        social_urls: socials,
         status: values.status,
         notes: values.notes || null,
+        custom_fields: changedValues(customOriginal, custom),
       };
       if (contact) await api.put(`/contacts/${contact.id}`, body);
       else await api.post(`/prospects/${organizationId}/contacts`, body);
@@ -105,6 +128,7 @@ function ContactDialog({
           )}
         </Field>
         <Field label="Notes" className="sm:col-span-2">{(p) => <Textarea {...p} value={values.notes} onChange={set("notes")} rows={3} />}</Field>
+        <CustomFieldInputs fields={fields} draft={custom} onChange={setCustom} />
       </div>
     </Dialog>
   );
@@ -166,6 +190,7 @@ export function ProspectDetail({ id, onClose }: { id: string | null; onClose: ()
   const [gameOpen, setGameOpen] = useState(false);
   const [opportunityOpen, setOpportunityOpen] = useState(false);
   const [note, setNote] = useState("");
+  const lanes = useLanes();
   const detail = query.data;
 
   const archive = useAction(
@@ -223,6 +248,25 @@ export function ProspectDetail({ id, onClose }: { id: string | null; onClose: ()
             </div>
           ) : null}
 
+          {detail.reviewed_on || detail.qualification_source_url || (detail.custom_fields ?? []).length ? (
+            <Card className="p-3">
+              <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[minmax(8rem,auto)_1fr]">
+                <dt className="text-muted-foreground">Review date</dt>
+                <dd>{detail.reviewed_on ? formatDate(detail.reviewed_on) : <span className="text-muted-foreground">—</span>}</dd>
+                <dt className="text-muted-foreground">Qualification source</dt>
+                <dd className="min-w-0">
+                  <CustomValueText field={{ key: "qualification_source_url", label: "Qualification source", field_type: "url", value: detail.qualification_source_url ?? null }} />
+                </dd>
+                {(detail.custom_fields ?? []).map((field) => (
+                  <div key={field.key} className="contents">
+                    <dt className="text-muted-foreground">{field.label}</dt>
+                    <dd className="min-w-0"><CustomValueText field={field} /></dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+          ) : null}
+
           <Tabs defaultValue="contacts">
             <TabsList>
               <TabsTrigger value="contacts">Contacts ({detail.contacts.filter((c) => !c.archived).length})</TabsTrigger>
@@ -245,6 +289,9 @@ export function ProspectDetail({ id, onClose }: { id: string | null; onClose: ()
                         </a>
                       ) : null}
                       {contact.provenance ? <p className="mt-1 text-xs text-muted-foreground">Source: {contact.provenance}</p> : null}
+                      {(detail.contact_fields ?? []).filter((f) => contact.custom_fields?.[f.key] !== undefined).map((f) => (
+                        <p key={f.key} className="mt-1 text-xs"><span className="text-muted-foreground">{f.label}:</span> <CustomValueText field={{ ...f, value: contact.custom_fields?.[f.key] ?? null }} /></p>
+                      ))}
                     </div>
                     <div className="flex items-center gap-1">
                       <Badge tone={STATUS_TONE[contact.status]}>{CONTACT_STATUS_LABELS[contact.status]}</Badge>
@@ -262,7 +309,7 @@ export function ProspectDetail({ id, onClose }: { id: string | null; onClose: ()
 
             <TabsContent value="opportunities" className="mt-3 space-y-2">
               {detail.opportunities.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No opportunities. A prospect can have several, one per product lane.</p>
+                <p className="text-sm text-muted-foreground">No opportunities. A prospect can have several, one per sales lane.</p>
               ) : null}
               {detail.opportunities.map((opp) => {
                 const due = relativeDue(opp.next_action_at);
@@ -271,13 +318,13 @@ export function ProspectDetail({ id, onClose }: { id: string | null; onClose: ()
                     <Card className="p-3 transition-colors hover:bg-muted/50">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="flex items-center gap-2 font-medium">
-                          <Dot color={LANE_COLORS[opp.product_lane] ?? "var(--brand-purple)"} />
-                          {opp.title ?? LANE_LABELS[opp.product_lane]}
+                          <Dot color={lanes.color(opp.product_lane)} />
+                          {opp.title ?? lanes.label(opp.product_lane)}
                         </p>
                         <Badge tone={opp.closed ? "neutral" : "purple"}>{opp.stage_name}</Badge>
                       </div>
                       <p className={due.overdue ? "mt-1 text-sm font-medium text-danger" : "mt-1 text-sm text-muted-foreground"}>
-                        {LANE_LABELS[opp.product_lane]} · {due.text}
+                        {lanes.label(opp.product_lane)} · {due.text}
                         {opp.next_action_note ? ` · ${opp.next_action_note}` : ""}
                       </p>
                     </Card>
@@ -343,6 +390,7 @@ export function ProspectDetail({ id, onClose }: { id: string | null; onClose: ()
               onOpenChange={(open) => setContactDialog({ open })}
               organizationId={detail.id}
               contact={contactDialog.contact}
+              fields={detail.contact_fields ?? []}
             />
           ) : null}
           {gameOpen ? <GameDialog open onOpenChange={setGameOpen} organizationId={detail.id} /> : null}

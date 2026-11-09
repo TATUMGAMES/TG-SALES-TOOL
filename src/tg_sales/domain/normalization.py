@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Normalization used for indexing, duplicate detection and imports.
 
 Normalized values are stored alongside the original values, which are never
@@ -190,6 +200,24 @@ def normalize_url(url: str | None) -> str | None:
     netloc = host if port is None else f"{host}:{port}"
     path = parts.path if parts.path not in ("", "/") else ""
     return urlunsplit((parts.scheme.lower(), netloc, path, parts.query, ""))
+
+
+def exact_url(url: str | None) -> str | None:
+    """The address exactly as written (query and ``#fragment`` kept), if it is safe.
+
+    Applies the same safety rules as :func:`normalize_url` (http or https only,
+    no credentials, a valid host) but does not rewrite the address, so
+    reference links such as search results keep every parameter. An address
+    without a scheme gets ``https://``.
+    """
+    if not url:
+        return None
+    text = url.strip()
+    if normalize_url(text) is None:
+        return None
+    if "://" not in text:
+        text = f"https://{text}"
+    return text
 
 
 def domain_from_url(url: str | None) -> str | None:

@@ -9,14 +9,19 @@ the bottom. On desktop, the sidebar lists every section.
 
 ## First start
 
-Enter your name (colleagues see it on what you add) and pick a theme. Add your
-company logo on **Resources**.
+Enter your name (colleagues see it on what you add) and pick a theme. Then, in
+**Settings & Sync**:
+
+- **Branding**: your company name, logo, browser icon and accent color.
+- **Sales lanes**: the categories you sell in (a new installation starts with
+  General Sales, Partnerships and Other).
+- **Custom fields**: extra fields for prospects and contacts.
 
 ## Dashboard
 
 - Choose a **period** (last 7 or 30 days, last month, 3, 6 or 12 months,
   previous calendar month/quarter/year, or a custom range); the exact dates
-  are shown. Filter by **salesperson** and **product lane**.
+  are shown. Filter by **salesperson** and **sales lane**.
 - Click any card to see the records behind the number. "Not available" means
   it cannot be calculated (for example a win rate before anything was won or
   lost); 0 means nothing happened.
@@ -36,6 +41,9 @@ company logo on **Resources**.
   them as CSV.
 - A prospect's panel has contacts (with outreach status: you set it, it is
   never guessed), opportunities, games, links, notes and the full timeline.
+  Its **review date**, **qualification source** (a link that opens in a new
+  tab) and **custom fields** are shown at the top and edited with the pencil
+  button; contacts' custom fields are edited on the contact.
 
 ## Importing a spreadsheet
 
@@ -43,7 +51,10 @@ company logo on **Resources**.
 
 1. Choose the file (and the sheet for Excel).
 2. Check the columns: tg_sales suggests what each column means, with a
-   confidence; change any choice. Say how dates like 03/04/2027 should be read.
+   confidence; change any choice, or choose **+ Create custom field…** for
+   information the standard fields do not cover. Columns such as *Reviewed On*
+   and *Qualification Source URL* are recognized. Say how dates like
+   03/04/2027 should be read.
 3. Review matches: rows are grouped per company; for companies that look like
    existing prospects choose **Create new**, **Add to** the existing one, or
    **Skip** (or decide for all at once). Problems are listed and can be
@@ -51,24 +62,26 @@ company logo on **Resources**.
 4. **Preview result** shows exactly what will happen.
 5. **Import now** saves everything at once (a backup is made first).
 
-Imports only add missing information; they never overwrite what you have.
-**Import history** lets you undo an import (anything edited since is kept).
+Imports only add missing information unless you switch on **Replace
+existing values** for that import. **Import history** lets you undo an import
+(anything edited since is kept). Details: [IMPORTING.md](IMPORTING.md).
 
 ## Pipeline
 
-- Columns are stages; filter by product lane or by name. Drag a card by its
+- Columns are stages; filter by sales lane (tabs) or by name. Drag a card by its
   handle to another stage (mouse or touch), or use the card's **⋯** menu,
   which also works from the keyboard. Moving to Won, Lost or Not a fit asks for
   a reason.
-- **New opportunity**: prospect, product lane, stage, title, salesperson,
+- **New opportunity**: prospect, sales lane, stage, title, salesperson,
   value, next follow-up. A prospect can have one in each lane.
 - Open a card to **log activity** (email, LinkedIn, call, meeting, reply,
   demo, data room, proposal…, with an optional earlier date), add notes and
   tasks, edit details, change the stage, or **Mark as mistake** (the entry
   stays visible, crossed out, and stops counting).
-- Data licensing opportunities have **Prepare technical handoff**: a copyable
-  email for the technical lead. Copying records the handoff; tg_sales never
-  sends anything.
+- Opportunities in lanes with *technical-review handoffs* turned on (Settings
+  › Sales lanes; on for *Data licensing* in the Tatum Games lanes) have
+  **Prepare technical handoff**: a copyable email for the technical lead.
+  Copying records the handoff; tg_sales never sends anything.
 - **Manage stages**: rename, reorder, add (optionally for one lane), set the
   outcome, archive (choose where its opportunities go) or restore.
 - Follow-ups due today or overdue appear under the bell icon and on the
@@ -107,19 +120,27 @@ listed with a preview.
 
 - **General**: your name, theme, time zone, number format, import and
   discovery preferences, automatic backup schedule and retention.
+- **Branding**: company name, logo, compact logo, browser tab icon, accent
+  color, and **Restore default branding**. See the README section
+  "Customizing your company branding".
+- **Sales lanes**: add, rename, recolor, reorder, archive, move records
+  between lanes, delete unused lanes, and add a preset set of lanes.
+- **Custom fields**: create, rename, archive and restore fields for prospects
+  and contacts.
 - **Sync**: share changes with colleagues; see [SYNC.md](SYNC.md).
 - **Backups**: **Back up now**, verify, download, delete and **Restore**
   (type RESTORE to confirm; a safety backup is made and the previous data is
   kept until the next restore).
 - **Desktop data**: bring in data from the earlier desktop version; see
   [MIGRATION.md](MIGRATION.md).
-- **About**: version, sync ID, data folder (open folders), health check and
-  privacy information.
+- **About**: version, sync ID, data folder (open folders), health check,
+  privacy information and the software license.
 
 ## Resources
 
 Bookmarks to web pages (shared with colleagues through sync) and folders on
-this computer (opened in Explorer), grouped by category, plus the company logo.
+this computer (opened in Explorer), grouped by category. The company logo is
+now set in Settings › Branding.
 
 ## Install as an app
 

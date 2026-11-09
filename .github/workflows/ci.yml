@@ -49,6 +49,7 @@ jobs:
       - run: python -m ruff check src tests scripts
       - run: python -m mypy
       - run: python scripts/generate_api_types.py --check
+      - run: python scripts/license_headers.py --check
       - run: python -m pytest
       - name: Dependency audit
         run: python -m pip_audit --strict -r requirements.lock

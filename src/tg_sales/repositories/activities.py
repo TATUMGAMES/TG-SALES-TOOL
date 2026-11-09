@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Immutable activity events.
 
 Payload conventions:
@@ -23,7 +33,7 @@ from sqlalchemy import case, or_, select
 from sqlalchemy.orm import Session
 
 from tg_sales.db.models import Activity, Opportunity
-from tg_sales.domain.enums import STAGE_ACTIVITY_TYPES, ActivityType, ProductLane
+from tg_sales.domain.enums import STAGE_ACTIVITY_TYPES, ActivityType
 from tg_sales.domain.ids import new_id
 from tg_sales.domain.pipeline import EventCorrection, StageEvent
 from tg_sales.domain.time import parse_utc
@@ -54,7 +64,7 @@ class ActivityRepository:
 
     def stage_events(
         self,
-        lane: ProductLane | None = None,
+        lane: str | None = None,
         *,
         occurred_until: datetime | None = None,
         also_include: Collection[str] = (),

@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import {
   DndContext,
   DragOverlay,
@@ -17,7 +29,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge, Card, Dot, LANE_COLORS } from "@/components/ui/card";
+import { Badge, Card, Dot } from "@/components/ui/card";
 import { Input } from "@/components/ui/form";
 import {
   DropdownMenu,
@@ -34,10 +46,10 @@ import {
   TabsTrigger,
 } from "@/components/ui/misc";
 import { api } from "@/lib/api";
-import type { Board, OpportunityCard, ProductLane, StageInfo } from "@/lib/api-types";
+import type { Board, OpportunityCard, StageInfo } from "@/lib/api-types";
 import { formatDate, relativeDue } from "@/lib/format";
 import { showError } from "@/lib/hooks";
-import { LANE_LABELS } from "@/lib/types";
+import { useLanes } from "@/lib/lanes";
 import { cn } from "@/lib/utils";
 import { NewOpportunityDialog } from "./NewOpportunityDialog";
 import { OpportunitySheet } from "./OpportunitySheet";
@@ -54,6 +66,7 @@ function CardBody({ card, stages, onOpen, onMove, dragHandle }: {
   dragHandle?: React.ReactNode;
 }) {
   const due = relativeDue(card.next_action_at);
+  const lanes = useLanes();
   const options = stages.filter((s) => s.id !== card.stage_id && (!s.product_lane || s.product_lane === card.product_lane));
   return (
     <Card className="group p-3 transition-shadow hover:shadow-md">
@@ -61,7 +74,7 @@ function CardBody({ card, stages, onOpen, onMove, dragHandle }: {
         {dragHandle}
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-semibold">{card.organization_name}</p>
-          <p className="truncate text-xs text-muted-foreground">{card.title ?? LANE_LABELS[card.product_lane]}</p>
+          <p className="truncate text-xs text-muted-foreground">{card.title ?? lanes.label(card.product_lane)}</p>
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -81,7 +94,7 @@ function CardBody({ card, stages, onOpen, onMove, dragHandle }: {
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
         <Badge tone="outline" className="gap-1.5">
-          <Dot color={LANE_COLORS[card.product_lane] ?? "var(--brand-purple)"} /> {LANE_LABELS[card.product_lane]}
+          <Dot color={lanes.color(card.product_lane)} /> {lanes.label(card.product_lane)}
         </Badge>
         {card.owner_name ? <span className="text-muted-foreground">{card.owner_name}</span> : null}
       </div>
@@ -123,7 +136,8 @@ function DraggableCard(props: { card: OpportunityCard; stages: StageInfo[]; onOp
 
 function Column({ stage, cards, children, onAdd }: { stage: StageInfo; cards: number; children: React.ReactNode; onAdd: () => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id, data: stage });
-  const color = OUTCOME_COLOR[stage.outcome] ?? (stage.product_lane ? LANE_COLORS[stage.product_lane] : "var(--brand-purple)");
+  const lanes = useLanes();
+  const color = OUTCOME_COLOR[stage.outcome] ?? (stage.product_lane ? lanes.color(stage.product_lane) : "var(--brand-purple)");
   return (
     <section
       ref={setNodeRef}
@@ -154,7 +168,8 @@ function Column({ stage, cards, children, onAdd }: { stage: StageInfo; cards: nu
 export function PipelinePage() {
   const client = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const [lane, setLane] = useState<"all" | ProductLane>("all");
+  const [lane, setLane] = useState("all");
+  const lanes = useLanes();
   const [filter, setFilter] = useState("");
   const [dragging, setDragging] = useState<OpportunityCard | null>(null);
   const [reason, setReason] = useState<{ card: OpportunityCard; stage: StageInfo } | null>(null);
@@ -192,7 +207,7 @@ export function PipelinePage() {
 
   const move = async (card: OpportunityCard, stage: StageInfo, reasonCode?: string, reasonNote?: string) => {
     if (stage.product_lane && stage.product_lane !== card.product_lane) {
-      toast.error(`“${stage.name}” is only for ${LANE_LABELS[stage.product_lane]} opportunities.`);
+      toast.error(`“${stage.name}” is only for ${lanes.label(stage.product_lane)} opportunities.`);
       return;
     }
     if (stage.outcome !== "open" && !reasonCode) {
@@ -240,13 +255,14 @@ export function PipelinePage() {
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Tabs value={lane} onValueChange={(v) => setLane(v as typeof lane)}>
-          <TabsList aria-label="Product lane">
+        <Tabs value={lane} onValueChange={setLane} className="max-w-full overflow-x-auto">
+          <TabsList aria-label="Sales lane">
             <TabsTrigger value="all">All lanes</TabsTrigger>
-            {(Object.keys(LANE_LABELS) as ProductLane[]).map((key) => (
-              <TabsTrigger key={key} value={key}>
-                <Dot color={LANE_COLORS[key] ?? ""} className="mr-1.5" />
-                {LANE_LABELS[key]}
+            {lanes.all.filter((l) => !l.archived || l.opportunity_count > 0).map((l) => (
+              <TabsTrigger key={l.key} value={l.key}>
+                <Dot color={lanes.color(l.key)} className="mr-1.5" />
+                {l.name}
+                {l.archived ? <span className="ml-1 text-xs opacity-70">(archived)</span> : null}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -266,7 +282,7 @@ export function PipelinePage() {
         <EmptyState
           icon={<KanbanSquare />}
           title="No opportunities yet"
-          description="Create an opportunity for a prospect. A prospect can have one in each product lane."
+          description="Create an opportunity for a prospect. A prospect can have one in each sales lane."
           action={<Button onClick={() => setNewIn({})}><Plus /> New opportunity</Button>}
         />
       ) : null}

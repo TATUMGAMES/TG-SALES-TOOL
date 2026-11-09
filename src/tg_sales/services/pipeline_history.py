@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Pipeline state at any past moment, reconstructed from the activity ledger."""
 
 from __future__ import annotations
@@ -6,7 +16,6 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from tg_sales.domain.enums import ProductLane
 from tg_sales.domain.pipeline import apply_corrections, stage_counts, stages_as_of
 from tg_sales.domain.time import ensure_utc
 from tg_sales.repositories.activities import ActivityRepository
@@ -18,7 +27,7 @@ class PipelineHistory:
         self._activities = ActivityRepository(session)
         self._opportunities = OpportunityRepository(session)
 
-    def stages_as_of(self, as_of: datetime, *, lane: ProductLane | None = None) -> dict[str, str]:
+    def stages_as_of(self, as_of: datetime, *, lane: str | None = None) -> dict[str, str]:
         """Map each opportunity that existed at ``as_of`` to its stage at that moment.
 
         Opportunities deleted at or before ``as_of`` are excluded.
@@ -33,9 +42,7 @@ class PipelineHistory:
         deleted = self._opportunities.deleted_at_or_before(moment)
         return {opp: stage for opp, stage in stages.items() if opp not in deleted}
 
-    def stage_counts_as_of(
-        self, as_of: datetime, *, lane: ProductLane | None = None
-    ) -> dict[str, int]:
+    def stage_counts_as_of(self, as_of: datetime, *, lane: str | None = None) -> dict[str, int]:
         return dict(stage_counts(self.stages_as_of(as_of, lane=lane)))
 
     def stage_of(self, opportunity_id: str, as_of: datetime) -> str | None:

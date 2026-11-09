@@ -1,9 +1,21 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, ExternalLink, FileText, ListPlus, MessageSquarePlus, Save, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Badge, Card, Dot, LANE_COLORS } from "@/components/ui/card";
+import { Badge, Card, Dot } from "@/components/ui/card";
 import { ConfirmDialog, Sheet } from "@/components/ui/dialog";
 import { Field, Input, NativeSelect } from "@/components/ui/form";
 import { ErrorState, LoadingRows, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/misc";
@@ -11,7 +23,7 @@ import { api } from "@/lib/api";
 import type { ActivityType, ActorInfo, OpportunityDetail, StageInfo } from "@/lib/api-types";
 import { formatDateTime, formatMoney, isoDate, relativeDue } from "@/lib/format";
 import { useAction, usePipelineMeta } from "@/lib/hooks";
-import { LANE_LABELS } from "@/lib/types";
+import { useLanes } from "@/lib/lanes";
 import { cn } from "@/lib/utils";
 import { HandoffDialog } from "./HandoffDialog";
 import { ReasonDialog } from "./ReasonDialog";
@@ -94,6 +106,7 @@ export function OpportunitySheet({ id, onClose }: { id: string | null; onClose: 
     success: "Marked as a mistake (kept in history)",
   });
 
+  const lanes = useLanes();
   const laneStages = (stages.data ?? []).filter((s) => detail && (!s.product_lane || s.product_lane === detail.card.product_lane));
   const due = relativeDue(detail?.card.next_action_at);
 
@@ -102,14 +115,14 @@ export function OpportunitySheet({ id, onClose }: { id: string | null; onClose: 
       open={Boolean(id)}
       onOpenChange={(o) => !o && onClose()}
       title={detail ? detail.card.organization_name : "Opportunity"}
-      description={detail ? detail.card.title ?? LANE_LABELS[detail.card.product_lane] : undefined}
+      description={detail ? detail.card.title ?? lanes.label(detail.card.product_lane) : undefined}
     >
       {query.isLoading ? <LoadingRows /> : null}
       {query.error ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : null}
       {detail ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="outline" className="gap-1.5"><Dot color={LANE_COLORS[detail.card.product_lane] ?? ""} />{LANE_LABELS[detail.card.product_lane]}</Badge>
+            <Badge tone="outline" className="gap-1.5"><Dot color={lanes.color(detail.card.product_lane)} />{lanes.label(detail.card.product_lane)}</Badge>
             <Badge tone={detail.stage.outcome === "won" ? "success" : detail.stage.outcome === "open" ? "purple" : "neutral"}>{detail.stage.name}</Badge>
             {detail.outcome_reason ? <Badge tone="outline">Reason: {detail.outcome_reason}</Badge> : null}
             {!detail.card.closed ? <span className={cn("text-sm", due.overdue ? "font-semibold text-danger" : "text-muted-foreground")}>{due.text}</span> : null}
@@ -118,7 +131,7 @@ export function OpportunitySheet({ id, onClose }: { id: string | null; onClose: 
             <Button asChild size="sm" variant="outline">
               <Link to={`/prospects?id=${detail.card.organization_id}`}><ExternalLink /> Open prospect</Link>
             </Button>
-            {detail.card.product_lane === "data_licensing" ? (
+            {lanes.get(detail.card.product_lane)?.technical_handoff ? (
               <Button size="sm" variant="outline" onClick={() => setHandoff(true)}><FileText /> Prepare technical handoff</Button>
             ) : null}
           </div>

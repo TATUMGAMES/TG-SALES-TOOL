@@ -1,17 +1,28 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Pipeline: stages, the board, opportunities, logged activities, tasks, reminders
 and technical-review handoffs."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from tg_sales.api.deps import Body, Ok, Svc
 from tg_sales.api.routers.prospects import Created
 from tg_sales.api.security import NotFoundError
-from tg_sales.domain.enums import ActivityType, ProductLane, StageOutcome
+from tg_sales.domain.enums import ActivityType, StageOutcome
 from tg_sales.domain.handoff import (
     REVIEW_NOTICE,
     HandoffDraft,
@@ -31,7 +42,6 @@ from tg_sales.domain.opportunities import (
     Reminder,
     StageInfo,
 )
-from tg_sales.reports.content import LANE_LABELS
 
 router = APIRouter(tags=["pipeline"])
 
@@ -51,9 +61,12 @@ class PipelineMeta(BaseModel):
 
 
 @router.get("/pipeline/meta", response_model=PipelineMeta)
-def meta() -> PipelineMeta:
+def meta(svc: Svc) -> PipelineMeta:
     return PipelineMeta(
-        lanes=[Choice(value=lane.value, label=LANE_LABELS[lane]) for lane in ProductLane],
+        lanes=[
+            Choice(value=lane.key, label=lane.name)
+            for lane in svc.lanes.list(include_archived=False)
+        ],
         outcomes=[o.value for o in StageOutcome],
         loggable_activities=[
             Choice(value=t.value, label=label) for t, label in LOGGABLE_ACTIVITIES
@@ -71,7 +84,7 @@ def meta() -> PipelineMeta:
 class StageIn(Body):
     name: str = Field(min_length=1, max_length=80)
     outcome: StageOutcome = StageOutcome.OPEN
-    lane: ProductLane | None = None
+    lane: str | None = Field(default=None, max_length=32)  # sales lane key
     after_stage_id: str | None = None
 
 
@@ -129,7 +142,7 @@ def restore_stage(stage_id: str, svc: Svc) -> Ok:
 
 # ------------------------------------------------------------------- board
 @router.get("/pipeline/board", response_model=Board)
-def board(svc: Svc, lane: ProductLane | None = None) -> Board:
+def board(svc: Svc, lane: Annotated[str | None, Query(max_length=32)] = None) -> Board:
     return svc.pipeline.board(lane)
 
 
@@ -151,7 +164,7 @@ def organization_choices(svc: Svc, text: str = "") -> list[OrgChoice]:
 # ------------------------------------------------------------ opportunities
 class OpportunityIn(Body):
     organization_id: str
-    product_lane: ProductLane
+    product_lane: str = Field(min_length=1, max_length=32)  # sales lane key
     stage_id: str
     title: str | None = Field(default=None, max_length=200)
     owner_actor_id: str | None = None

@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Composition root of the web server: opens the database and builds the services.
 
 The context owns everything long-lived: the PostgreSQL connection pool, the
@@ -34,11 +44,13 @@ from tg_sales.integrations.website_contacts import WebsiteContactFinder
 from tg_sales.reports.generator import ReportLibrary
 from tg_sales.services.app_settings import AppSettings, SettingsService
 from tg_sales.services.backups import BackupError, BackupManager, PgTools
-from tg_sales.services.branding import LogoStore
+from tg_sales.services.branding import BrandingService, BrandingStore, LogoStore
+from tg_sales.services.custom_fields import CustomFieldService
 from tg_sales.services.discovery import DiscoveryService
 from tg_sales.services.identity import ensure_local_actor
 from tg_sales.services.imports import ImportService
 from tg_sales.services.kpis import KpiService
+from tg_sales.services.lanes import LaneService
 from tg_sales.services.pipeline import PipelineService
 from tg_sales.services.playbook import PlaybookService
 from tg_sales.services.prospects import ProspectService
@@ -56,11 +68,14 @@ class Services:
     prospects: ProspectService
     imports: ImportService
     pipeline: PipelineService
+    lanes: LaneService
+    custom_fields: CustomFieldService
     kpis: KpiService
     discovery: DiscoveryService
     playbook: PlaybookService
     snapshots: SnapshotService
     settings: SettingsService
+    branding: BrandingService
     resources: ResourceService
     sync: SyncService
 
@@ -84,6 +99,7 @@ class AppContext:
         self._clock: Clock = clock or SystemClock()
         self.jobs = JobManager()
         self.logo = LogoStore(paths.user_assets_dir)
+        self.branding_store = BrandingStore(paths.user_assets_dir)
         self.reports = ReportLibrary(paths.reports_dir)
         self._http_override = http
         self._lock = threading.RLock()
@@ -150,6 +166,8 @@ class AppContext:
             prospects=ProspectService(self.database, self.actor_id),
             imports=ImportService(self.database, self.actor_id),
             pipeline=PipelineService(self.database, self.actor_id),
+            lanes=LaneService(self.database, self.actor_id),
+            custom_fields=CustomFieldService(self.database),
             kpis=KpiService(self.database, zone=zone),
             discovery=DiscoveryService(
                 self.database,
@@ -161,6 +179,7 @@ class AppContext:
             playbook=PlaybookService(self.database, self.actor_id),
             snapshots=SnapshotService(self.database, self.paths.snapshots_dir),
             settings=settings_service,
+            branding=BrandingService(self.database, self.branding_store),
             resources=ResourceService(self.database),
             sync=SyncService(
                 self.database,

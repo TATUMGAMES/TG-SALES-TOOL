@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Every API area exercised end to end against PostgreSQL (no mocks below the HTTP layer)."""
 
 from __future__ import annotations
@@ -200,7 +210,11 @@ def test_import_refuses_unsupported_files(api: Api) -> None:
 def test_pipeline_flow(api: Api) -> None:
     org = _prospect(api, "Deal Studio")
     meta = api.get("/pipeline/meta")
+    # The configured lanes: a new installation's defaults plus the Tatum Games preset.
     assert {lane["value"] for lane in meta["lanes"]} == {
+        "general_sales",
+        "partnerships",
+        "other",
         "data_licensing",
         "publisher_partnership",
         "mikros_marketing",
@@ -564,11 +578,18 @@ def test_resources_and_logo(api: Api) -> None:
     assert logo.status_code == 200
     with Image.open(io.BytesIO(logo.content)) as stored:
         assert max(stored.size) == 512  # downscaled and re-encoded
+    # SVG logos are accepted only without scripts, event handlers or external links.
     bad = api.call(
         "PUT",
         "/branding/logo",
         expect=400,
-        files={"image": ("logo.svg", b"<svg/>", "image/svg+xml")},
+        files={
+            "image": (
+                "logo.svg",
+                b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
+                "image/svg+xml",
+            )
+        },
     )
     assert "Choose a different image" in bad["error"]["action"]
     api.call("DELETE", "/branding/logo")

@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Dashboard data: KPIs for a period and filters, plus release windows and recent activity.
 
 Results are cached per (period, filters, minute) and reused while the
@@ -209,7 +219,7 @@ class KpiService:
                 continue
             if filters.lane is not None:
                 opp = opportunities.get(activity.opportunity_id or "")
-                if opp is None or opp.lane is not filters.lane:
+                if opp is None or opp.lane != filters.lane:
                     continue
             result.append(
                 RecentActivity(

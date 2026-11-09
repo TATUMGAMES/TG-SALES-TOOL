@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Generate report folders and manage the reports library.
 
 Each report is a folder in the reports folder containing ``report.pdf``,
@@ -13,7 +23,7 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, tzinfo
 from pathlib import Path
 from typing import Any
@@ -47,6 +57,7 @@ class ReportRequest:
     filters: KpiFilters = KpiFilters()  # noqa: RUF009 - immutable value
     salesperson: str | None = None
     include_html: bool = True
+    lane_names: Mapping[str, str] = field(default_factory=dict)  # lane key -> display name
 
 
 @dataclass(frozen=True)
@@ -152,7 +163,7 @@ def write_report(
             "end": meta.dates.end.isoformat(),
             "filters": {
                 "actor_id": meta.filters.actor_id,
-                "lane": meta.filters.lane.value if meta.filters.lane else None,
+                "lane": meta.filters.lane,
             },
             "filter_text": meta.filter_text,
             "generated_at_utc": meta.generated_at.astimezone(UTC).isoformat(),
@@ -214,6 +225,7 @@ def create_report(
         generated_at=current.computed_at,
         app_version=app_version,
         zone=zone,
+        lane_names=request.lane_names,
     )
     content = build_report(meta, current.report, previous.report, actor_names)
     step(75, "Writing the PDF and data files…")

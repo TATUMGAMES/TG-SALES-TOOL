@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
@@ -26,8 +38,9 @@ import { Badge } from "@/components/ui/card";
 import { Sheet } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/form";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Tooltip } from "@/components/ui/misc";
-import { api, apiUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Reminder } from "@/lib/api-types";
+import { brandImageUrl, PRODUCT_NAME, useApplyBranding, useBranding } from "@/lib/branding";
 import { relativeDue } from "@/lib/format";
 import { useInfo, useOnline } from "@/lib/hooks";
 import { useTheme } from "@/lib/theme";
@@ -46,27 +59,23 @@ export const NAV = [
 ] as const;
 
 function Brand() {
-  const logo = useQuery({
-    queryKey: ["logo"],
-    queryFn: async () => {
-      const response = await fetch(apiUrl("/branding/logo"));
-      return response.status === 200 ? URL.createObjectURL(await response.blob()) : null;
-    },
-    staleTime: Infinity,
-  });
+  const branding = useBranding().data;
+  const logo = brandImageUrl(branding, "logo");
   return (
     <div className="flex items-center gap-2.5">
-      {logo.data ? (
-        <img src={logo.data} alt="Company logo" className="size-9 rounded-lg object-contain" />
-      ) : (
-        <img src="/icons/icon.svg" alt="" className="size-9" />
-      )}
-      <div className="leading-tight">
-        <p className="text-sm font-semibold">TG Sales</p>
-        <p className="text-xs text-muted-foreground">Tatum Games CRM</p>
+      <img src={logo ?? "/icons/icon.svg"} alt={logo ? `${branding?.display_name ?? "Company"} logo` : ""} className="size-9 rounded-lg object-contain" />
+      <div className="min-w-0 leading-tight">
+        <p className="text-sm font-semibold">{PRODUCT_NAME}</p>
+        <p className="truncate text-xs text-muted-foreground">{branding?.display_name ?? ""}</p>
       </div>
     </div>
   );
+}
+
+function CompactLogo() {
+  const branding = useBranding().data;
+  const logo = brandImageUrl(branding, "compact_logo") ?? brandImageUrl(branding, "logo");
+  return <img src={logo ?? "/icons/icon.svg"} alt={branding?.display_name ?? PRODUCT_NAME} className="size-8 rounded object-contain" />;
 }
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
@@ -195,6 +204,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const info = useInfo();
   const location = useLocation();
   const dialogs = useAppDialogs();
+  const branding = useBranding().data;
+  useApplyBranding();
 
   return (
     <div className="min-h-dvh lg:pl-64">
@@ -218,7 +229,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Menu />
           </Button>
           <div className="lg:hidden">
-            <img src="/icons/icon.svg" alt="TG Sales" className="size-8" />
+            <CompactLogo />
           </div>
           <GlobalSearch className="hidden flex-1 sm:block sm:max-w-md" />
           <div className="ml-auto flex items-center gap-1">
@@ -247,7 +258,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </header>
 
-      <Sheet open={menuOpen} onOpenChange={setMenuOpen} title="TG Sales" description="Tatum Games CRM">
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen} title={PRODUCT_NAME} description={branding?.display_name ?? ""}>
         <NavItems onNavigate={() => setMenuOpen(false)} />
         <div className="mt-6 grid gap-2">
           <Button variant="outline" onClick={() => { setMenuOpen(false); dialogs.openImport(); }}>

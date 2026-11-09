@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -207,13 +217,14 @@ def test_probability_and_value_constraints(database: Database) -> None:
 
 
 def test_invalid_enum_value_is_rejected(database: Database) -> None:
-    org_id = add_org(database)
+    # Sales lanes are user-defined (validated by the lane service); fixed choices such
+    # as the company type are still checked by the column type.
     with pytest.raises(StatementError), database.session() as session:
         session.add(
-            Opportunity(
-                organization_id=org_id,
-                product_lane="crypto",  # type: ignore[arg-type]
-                stage_id=FIRST_STAGE,
+            Organization(
+                name="Crypto",
+                normalized_name="crypto",
+                company_type="crypto",  # type: ignore[arg-type]
             )
         )
 

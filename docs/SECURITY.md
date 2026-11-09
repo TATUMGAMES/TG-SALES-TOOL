@@ -10,7 +10,8 @@
 | SQL injection | All queries are parameterized through SQLAlchemy/psycopg; tested with hostile input |
 | Malicious import files | Size limits, extension and content checks, macro-enabled/legacy/encrypted workbooks refused, XLSX compression-bomb limits, formulas never evaluated, row/column limits; uploaded files are kept only during the import and deleted afterwards |
 | Malicious sync packages | Name allow-list (no paths), size and ratio limits, per-file SHA-256, schema/format checks, full value validation, one transaction, backup first; optional authenticated encryption |
-| Malicious images (logo, snapshots) | Decoded and re-encoded with Pillow (decompression-bomb limit, dimension limit, PNG/JPEG/BMP/WebP only, no SVG) |
+| Malicious images (branding, snapshots) | Raster images are decoded and re-encoded with Pillow (decompression-bomb limit, dimension limit, PNG/JPEG/BMP/WebP only). Branding SVGs (logo, compact logo, favicon; never snapshots) are accepted only when they are self-contained: files with scripts, event handlers, `foreignObject`, animations, links to other files or sites, `@import`/`url()` styles, document type declarations or entities are refused. SVGs are served as images with `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`, and shown only through `<img>` elements, where browsers run no scripts |
+| Unsafe links in records | Qualification source URLs and URL custom fields must be `http(s)` without credentials; they are stored as typed, never fetched by the server, and opened with `rel="noopener noreferrer"` in a new tab |
 | Path traversal (downloads, deletes) | Every file path from the database or a URL is resolved and must stay inside its own data folder; names are pattern-checked |
 | Spreadsheet formula injection in exports | Cells starting with `=`, `+`, `-`, `@`, tab or carriage return are neutralized in every CSV (server and browser) |
 | Data loss | Verified backups before upgrades, imports, sync imports and restores, plus scheduled backups with retention; restore into a temporary database and swap; immutable activity ledger |
@@ -19,8 +20,9 @@
 
 ## What stays on the computer and what leaves it
 
-- Stays: the database, backups, reports, snapshots, logs and settings, all in
-  `%LOCALAPPDATA%\TatumGames\tg_sales`.
+- Stays: the database, backups, reports, snapshots, logs, settings and
+  branding images, all in `%LOCALAPPDATA%\TatumGames\tg_sales` (or the
+  folder chosen with `TG_SALES_DATA_DIR` / `--data-dir`).
 - Leaves only when you act: **Game discovery** requests public Steam store
   pages and the official studio website of a game (with a polite request rate
   and robots.txt respected); **sync packages** you export and send yourself;

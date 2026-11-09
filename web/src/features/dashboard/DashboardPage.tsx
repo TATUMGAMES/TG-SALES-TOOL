@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toCanvas } from "html-to-image";
 import { Camera, Info, LayoutDashboard, Plus, RefreshCw, Upload } from "lucide-react";
@@ -36,11 +48,11 @@ import {
   Tooltip,
 } from "@/components/ui/misc";
 import { api } from "@/lib/api";
-import type { ActorChoice, DashboardView, Metric, ProductLane, Reminder, SnapshotView } from "@/lib/api-types";
+import type { ActorChoice, DashboardView, Metric, Reminder, SnapshotView } from "@/lib/api-types";
 import { formatDate, formatDateTime, formatNumber, humanize, relativeDue } from "@/lib/format";
 import { showError } from "@/lib/hooks";
 import { useTheme } from "@/lib/theme";
-import { LANE_LABELS } from "@/lib/types";
+import { useLanes } from "@/lib/lanes";
 import { cn } from "@/lib/utils";
 
 const PRIMARY_METRICS = ["leads_added", "contacts_attempted", "replies", "active_opportunities", "won", "lost", "win_rate", "follow_ups_overdue"];
@@ -113,7 +125,8 @@ export function DashboardPage() {
   const area = useRef<HTMLDivElement>(null);
   const [period, setPeriod] = useState<PeriodValue>({ preset: "30d", start: "", end: "" });
   const [actor, setActor] = useState("");
-  const [lane, setLane] = useState<"" | ProductLane>("");
+  const [lane, setLane] = useState("");
+  const lanes = useLanes();
   const [drill, setDrill] = useState<Metric | null>(null);
   const [snapping, setSnapping] = useState(false);
 
@@ -171,7 +184,7 @@ export function DashboardPage() {
           period_start: query.data.period.start,
           period_end: query.data.period.end,
           salesperson: people.data?.find((p) => p.id === actor)?.name ?? null,
-          lane: lane ? LANE_LABELS[lane] : null,
+          lane: lane ? lanes.label(lane) : null,
           area: whole ? "whole" : "visible",
         }),
       );
@@ -229,11 +242,11 @@ export function DashboardPage() {
             </NativeSelect>
           )}
         </Field>
-        <Field label="Product lane" className="min-w-48">
+        <Field label="Sales lane" className="min-w-48">
           {(p) => (
-            <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value as "" | ProductLane)}>
+            <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value)}>
               <option value="">All lanes</option>
-              {Object.entries(LANE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {lanes.all.map((l) => <option key={l.key} value={l.key}>{l.name}{l.archived ? " (archived)" : ""}</option>)}
             </NativeSelect>
           )}
         </Field>

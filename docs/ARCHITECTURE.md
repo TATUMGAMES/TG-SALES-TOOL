@@ -46,11 +46,13 @@ flowchart LR
 
 ```
 src/tg_sales/
-  domain/         Pure rules: prospects, importing, pipeline, KPIs, discovery scoring,
-                  playbook, periods, snapshots naming (no database, network or web)
+  domain/         Pure rules: prospects, importing, custom fields, sales lanes, pipeline,
+                  KPIs, discovery scoring, playbook, periods, snapshots naming
+                  (no database, network or web)
   repositories/   SQLAlchemy queries
-  services/       Use cases: prospects, imports, pipeline, KPIs, discovery, playbook,
-                  snapshots, report catalog, backups, settings, resources, branding
+  services/       Use cases: prospects, imports, custom fields, lanes, pipeline, KPIs,
+                  discovery, playbook, snapshots, report catalog, backups, settings,
+                  resources, branding
   reports/        Report content, SVG/ReportLab charts, PDF/HTML documents, generator
   sync/           Offline collaboration: package format (zip, hashes, encryption), merge engine
   integrations/   HTTP client (rate limits, robots.txt), Steam adapter, website contact finder
@@ -62,8 +64,10 @@ src/tg_sales/
 web/
   src/components/ UI kit (button, form fields, dialog/sheet, menus, tabs, cards…), layout shell
   src/features/   One folder per screen: dashboard, prospects, imports, pipeline, discovery,
-                  playbook, reports, resources, settings (incl. sync, backups), onboarding
-  src/lib/        API client, generated API types, job polling, formatting, theme, CSV
+                  playbook, reports, resources, settings (incl. branding, sales lanes,
+                  custom fields, sync, backups), onboarding
+  src/lib/        API client, generated API types, job polling, formatting, theme, CSV,
+                  lanes and branding hooks
   e2e/            Playwright browser tests
 deploy/           Dockerfile, docker-compose.yml, .env.example
 scripts/          setup, quality gate, Windows build, smoke test, generators, benchmark

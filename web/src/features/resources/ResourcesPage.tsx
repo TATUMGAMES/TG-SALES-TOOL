@@ -1,14 +1,26 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ExternalLink, FolderOpen, ImageUp, Link2, Pencil, Plus, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Field, Input, NativeSelect, Textarea } from "@/components/ui/form";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/ui/misc";
-import { api, apiUrl } from "@/lib/api";
-import type { LogoInfo, ResourceInfo } from "@/lib/api-types";
+import { api } from "@/lib/api";
+import type { ResourceInfo } from "@/lib/api-types";
 import { showError, useAction, useInfo } from "@/lib/hooks";
 
 interface Draft {
@@ -68,30 +80,13 @@ function ResourceDialog({ open, onOpenChange, resource }: { open: boolean; onOpe
 }
 
 export function ResourcesPage() {
-  const client = useQueryClient();
   const info = useInfo();
-  const logoInput = useRef<HTMLInputElement>(null);
   const resources = useQuery({ queryKey: ["resources"], queryFn: () => api.get<ResourceInfo[]>("/resources") });
-  const logo = useQuery({ queryKey: ["logo-info"], queryFn: () => api.get<LogoInfo>("/branding/logo/info") });
   const [editing, setEditing] = useState<{ resource?: ResourceInfo } | null>(null);
   const [deleting, setDeleting] = useState<ResourceInfo | null>(null);
   const remove = useAction((id: string) => api.delete(`/resources/${id}`), { invalidate: [["resources"]], success: "Bookmark removed" });
   const reorder = useAction((ids: string[]) => api.put("/resources/order", { ids }), { invalidate: [["resources"]] });
   const openFolder = useAction((id: string) => api.post(`/resources/${id}/open`));
-  const removeLogo = useAction(() => api.delete("/branding/logo"), { invalidate: [["logo"], ["logo-info"]], success: "Logo removed" });
-
-  const uploadLogo = async (file: File) => {
-    const form = new FormData();
-    form.append("image", file);
-    try {
-      await api.put("/branding/logo", form);
-      await client.invalidateQueries({ queryKey: ["logo"] });
-      await client.invalidateQueries({ queryKey: ["logo-info"] });
-      toast.success("Logo updated");
-    } catch (error) {
-      showError(error);
-    }
-  };
 
   const items = resources.data ?? [];
   const groups = [...new Set(items.map((r) => r.category ?? "Other"))];
@@ -104,18 +99,10 @@ export function ResourcesPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Resources" description="Bookmarks to internal documents and folders, and your company logo." actions={<Button onClick={() => setEditing({})}><Plus /> Add bookmark</Button>} />
-      <Card>
-        <CardHeader title="Company logo" description={logo.data?.requirements} />
-        <div className="flex flex-wrap items-center gap-4 p-5 pt-3">
-          <div className="flex size-20 items-center justify-center rounded-xl border bg-muted/40">
-            {logo.data?.present ? <img src={`${apiUrl("/branding/logo")}?v=${Date.now() % 100000}`} alt="Company logo" className="max-h-16 max-w-16 object-contain" /> : <img src="/icons/icon.svg" alt="Default icon" className="size-12" />}
-          </div>
-          <input ref={logoInput} type="file" accept="image/png,image/jpeg,image/bmp,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ""; }} />
-          <Button variant="outline" onClick={() => logoInput.current?.click()}><ImageUp /> Choose logo…</Button>
-          {logo.data?.present ? <Button variant="ghost" onClick={() => removeLogo.mutate()}>Remove logo</Button> : null}
-          <p className="w-full text-xs text-muted-foreground">The image is checked, resized and stored as a clean copy on this computer.</p>
-        </div>
+      <PageHeader title="Resources" description="Bookmarks to internal documents and folders." actions={<Button onClick={() => setEditing({})}><Plus /> Add bookmark</Button>} />
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+        <p className="text-muted-foreground">The company name, logo, browser icon and accent color are set in Settings › Branding.</p>
+        <Button asChild variant="outline" size="sm"><Link to="/settings?tab=branding"><ImageUp /> Open branding settings</Link></Button>
       </Card>
 
       {resources.error ? <ErrorState error={resources.error} /> : null}

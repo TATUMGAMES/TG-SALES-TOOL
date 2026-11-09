@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -5,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, NativeSelect, Textarea } from "@/components/ui/form";
 import { api } from "@/lib/api";
-import type { ActorInfo, Created, OrgChoice, ProductLane, StageInfo } from "@/lib/api-types";
+import type { ActorInfo, Created, OrgChoice, StageInfo } from "@/lib/api-types";
 import { showError, useDebounced, usePipelineMeta } from "@/lib/hooks";
 
 interface Props {
@@ -13,7 +25,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   organization?: { id: string; name: string } | undefined;
   defaultStageId?: string | undefined;
-  defaultLane?: ProductLane | undefined;
+  defaultLane?: string | undefined;
   onCreated?: (id: string) => void;
 }
 
@@ -22,7 +34,7 @@ export function NewOpportunityDialog({ open, onOpenChange, organization, default
   const meta = usePipelineMeta();
   const [orgText, setOrgText] = useState("");
   const [orgId, setOrgId] = useState(organization?.id ?? "");
-  const [lane, setLane] = useState<ProductLane>(defaultLane ?? "data_licensing");
+  const [chosenLane, setLane] = useState(defaultLane ?? "");
   const [stageId, setStageId] = useState(defaultStageId ?? "");
   const [title, setTitle] = useState("");
   const [owner, setOwner] = useState("");
@@ -48,6 +60,9 @@ export function NewOpportunityDialog({ open, onOpenChange, organization, default
     queryFn: () => api.get<OrgChoice[]>("/pipeline/organizations", { text: search }),
     enabled: open && !organization,
   });
+  const laneChoices = meta.data?.lanes ?? [];
+  // The chosen lane, or the first active lane (the configured lanes differ per installation).
+  const lane = laneChoices.some((l) => l.value === chosenLane) ? chosenLane : laneChoices[0]?.value ?? "";
   const laneStages = (stages.data ?? []).filter((s) => !s.product_lane || s.product_lane === lane);
   const effectiveStage = stageId && laneStages.some((s) => s.id === stageId) ? stageId : laneStages[0]?.id ?? "";
 
@@ -86,7 +101,7 @@ export function NewOpportunityDialog({ open, onOpenChange, organization, default
       open={open}
       onOpenChange={onOpenChange}
       title="New opportunity"
-      description={organization ? `For ${organization.name}` : "A deal with a prospect in one product lane."}
+      description={organization ? `For ${organization.name}` : "A deal with a prospect in one sales lane."}
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -108,10 +123,10 @@ export function NewOpportunityDialog({ open, onOpenChange, organization, default
             )}
           </Field>
         ) : null}
-        <Field label="Product lane" required>
+        <Field label="Sales lane" required>
           {(p) => (
-            <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value as ProductLane)}>
-              {(meta.data?.lanes ?? []).map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+            <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value)}>
+              {laneChoices.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
             </NativeSelect>
           )}
         </Field>

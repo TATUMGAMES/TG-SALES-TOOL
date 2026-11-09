@@ -1,4 +1,14 @@
-"""Technical handoff drafts for data-licensing opportunities.
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
+"""Technical handoff drafts for lanes with technical handoffs (such as data licensing).
 
 A handoff summarizes what a prospective data buyer needs so the technical lead
 can assess it. tg_sales only drafts the text for the salesperson to copy into
@@ -11,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 REVIEW_NOTICE = (
-    "Nothing in this summary approves any dataset for sale or commits Tatum Games to "
+    "Nothing in this summary approves any dataset for sale or commits our company to "
     "delivering specific data. Availability, scope, pricing and terms require an "
     "authorized internal review before anything is offered to the prospect."
 )

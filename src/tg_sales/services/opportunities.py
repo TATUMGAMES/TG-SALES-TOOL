@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Creating opportunities and moving them between stages.
 
 The opportunity row holds the current stage for fast queries; every change is
@@ -12,7 +22,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from tg_sales.db.models import Activity, Opportunity, PipelineStage
-from tg_sales.domain.enums import ActivityType, ProductLane, RecordSource
+from tg_sales.domain.enums import ActivityType, RecordSource
 from tg_sales.domain.time import Clock, ensure_utc
 from tg_sales.repositories.opportunities import OpportunityRepository
 from tg_sales.repositories.stages import StageRepository
@@ -26,19 +36,19 @@ class OpportunityService:
         self._ledger = ledger
         self._clock = clock
 
-    def _usable_stage(self, stage_id: str, lane: ProductLane) -> PipelineStage:
+    def _usable_stage(self, stage_id: str, lane: str) -> PipelineStage:
         stage = self._stages.get(stage_id)
         if stage is None or stage.archived_at_utc is not None:
             raise ValueError(f"stage {stage_id} is not available")
-        if stage.product_lane is not None and stage.product_lane is not lane:
-            raise ValueError(f"stage {stage.name!r} belongs to another product lane")
+        if stage.product_lane is not None and stage.product_lane != lane:
+            raise ValueError(f"stage {stage.name!r} belongs to another sales lane")
         return stage
 
     def create(
         self,
         *,
         organization_id: str,
-        product_lane: ProductLane,
+        product_lane: str,
         stage_id: str,
         owner_actor_id: str | None = None,
         title: str | None = None,
@@ -64,7 +74,7 @@ class OpportunityService:
             opportunity_id=opportunity.id,
             payload={
                 "stage_id": stage.id,
-                "product_lane": product_lane.value,
+                "product_lane": str(product_lane),
                 "to_outcome": stage.outcome.value,
             },
             source=source,

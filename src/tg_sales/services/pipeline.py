@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Pipeline use cases: stages, the board, opportunities, logged interactions and tasks.
 
 Stage identifiers never change, so renaming or reordering stages never affects
@@ -11,11 +21,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tg_sales.db.database import Database
-from tg_sales.db.models import Activity, Opportunity, PipelineStage, Task
-from tg_sales.domain.enums import ActivityType, ProductLane, StageOutcome
+from tg_sales.db.models import Activity, Opportunity, PipelineStage, SalesLane, Task
+from tg_sales.domain.enums import ActivityType, StageOutcome
 from tg_sales.domain.handoff import HandoffDraft
 from tg_sales.domain.normalization import normalize_email
 from tg_sales.domain.opportunities import (
@@ -43,6 +54,7 @@ from tg_sales.repositories.opportunities import OpportunityRepository
 from tg_sales.repositories.pipeline import PipelineRepository
 from tg_sales.repositories.prospects import ContactRepository, OrganizationRepository
 from tg_sales.repositories.stages import StageRepository
+from tg_sales.services.lanes import require_active_lane
 from tg_sales.services.ledger import ActivityLedger
 from tg_sales.services.opportunities import OpportunityService
 from tg_sales.services.timeline import summarize
@@ -107,7 +119,7 @@ class PipelineService:
             ]
 
     def _validated_stage_name(
-        self, session: Session, name: str, lane: ProductLane | None, exclude_id: str | None
+        self, session: Session, name: str, lane: str | None, exclude_id: str | None
     ) -> str:
         cleaned = _clean(name, MAX_STAGE_NAME_LENGTH)
         if cleaned is None:
@@ -116,7 +128,7 @@ class PipelineService:
             if (
                 stage.id != exclude_id
                 and stage.name.casefold() == cleaned.casefold()
-                and (stage.product_lane is None or lane is None or stage.product_lane is lane)
+                and (stage.product_lane is None or lane is None or stage.product_lane == lane)
             ):
                 raise _refuse(
                     f"A stage called “{cleaned}” already exists.",
@@ -136,11 +148,13 @@ class PipelineService:
         self,
         name: str,
         outcome: StageOutcome = StageOutcome.OPEN,
-        lane: ProductLane | None = None,
+        lane: str | None = None,
         *,
         after_stage_id: str | None = None,
     ) -> str:
         with self._database.session() as session:
+            if lane is not None:
+                require_active_lane(session, lane)  # LaneError explains what to do
             cleaned = self._validated_stage_name(session, name, lane, None)
             ordered = list(StageRepository(session).list())
             position = len(ordered)
@@ -234,7 +248,7 @@ class PipelineService:
         ]
         if not others:
             raise _refuse(
-                "At least one open stage for all product lanes must remain.",
+                "At least one open stage for all sales lanes must remain.",
                 "Create another open stage first.",
             )
 
@@ -263,10 +277,10 @@ class PipelineService:
                 for opportunity in opportunities:
                     if (
                         target.product_lane is not None
-                        and target.product_lane is not opportunity.product_lane
+                        and target.product_lane != opportunity.product_lane
                     ):
                         raise _refuse(
-                            f"“{target.name}” belongs to another product lane.",
+                            f"“{target.name}” belongs to another sales lane.",
                             "Choose a stage available to all of this stage's opportunities.",
                         )
                     mover.move_to_stage(opportunity.id, target.id, reason=reason, reason_code=code)
@@ -305,19 +319,19 @@ class PipelineService:
 
     # -- board --------------------------------------------------------------
 
-    def board(self, lane: ProductLane | None = None) -> Board:
+    def board(self, lane: str | None = None) -> Board:
         with self._database.session() as session:
             stages = [
                 _stage_info(s)
                 for s in StageRepository(session).list()
-                if lane is None or s.product_lane is None or s.product_lane is lane
+                if lane is None or s.product_lane is None or s.product_lane == lane
             ]
             cards = self._cards(session, lane)
             visible = {s.id for s in stages}
             return Board(tuple(stages), tuple(c for c in cards if c.stage_id in visible))
 
     def _cards(
-        self, session: Session, lane: ProductLane | None, opportunity_id: str | None = None
+        self, session: Session, lane: str | None, opportunity_id: str | None = None
     ) -> list[OpportunityCard]:
         repo = PipelineRepository(session)
         rows = repo.board_rows(lane, opportunity_id)
@@ -367,6 +381,7 @@ class PipelineService:
         with self._database.session() as session:
             if OrganizationRepository(session).get(draft.organization_id) is None:
                 raise _refuse("That prospect no longer exists.", "Choose another prospect.")
+            require_active_lane(session, draft.product_lane)
             service = OpportunityService(session, self._ledger(session), self._database.clock)
             try:
                 opportunity = service.create(
@@ -378,7 +393,7 @@ class PipelineService:
                 )
             except ValueError as exc:
                 raise _refuse(
-                    "That stage cannot be used for this product lane.",
+                    "That stage cannot be used for this sales lane.",
                     "Choose a stage shown for the selected lane.",
                 ) from exc
             opportunity.estimated_value = draft.estimated_value
@@ -423,7 +438,7 @@ class PipelineService:
                 )
             except ValueError as exc:
                 raise _refuse(
-                    f"“{stage.name}” is not available for this opportunity's product lane.",
+                    f"“{stage.name}” is not available for this opportunity's sales lane.",
                     "Choose a stage shown for its lane.",
                 ) from exc
             return event is not None
@@ -734,10 +749,17 @@ class PipelineService:
         detail = self.detail(opportunity_id)
         if detail is None:
             raise _refuse("This opportunity no longer exists.", "Refresh the pipeline.")
-        if detail.card.product_lane is not ProductLane.DATA_LICENSING:
+        with self._database.session() as session:
+            lane = session.scalar(
+                select(SalesLane).where(SalesLane.key == detail.card.product_lane)
+            )
+            handoff = lane is not None and lane.technical_handoff
+            lane_name = lane.name if lane is not None else detail.card.product_lane
+        if not handoff:
             raise _refuse(
-                "Technical handoffs are for data-licensing opportunities.",
-                "Open a data-licensing opportunity to prepare a handoff.",
+                "Technical handoffs are not turned on for this opportunity's sales lane.",
+                "Turn on “Technical-review handoffs” for the lane in Settings > Sales lanes, "
+                "or open an opportunity in a lane that has them.",
             )
         contact = next((c for c in detail.contacts if c.id == contact_id), None) or (
             detail.contacts[0] if detail.contacts else None
@@ -753,7 +775,7 @@ class PipelineService:
             organization=detail.card.organization_name,
             website=detail.organization_website,
             contact=contact_text,
-            opportunity=detail.card.title or "Data licensing",
+            opportunity=detail.card.title or lane_name,
             prepared_by=actor.display_name if actor else None,
         )
 

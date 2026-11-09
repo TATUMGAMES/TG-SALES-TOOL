@@ -1,5 +1,17 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -10,9 +22,10 @@ import { Badge } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, NativeSelect, Textarea } from "@/components/ui/form";
 import { ApiError, api } from "@/lib/api";
-import type { Created, DuplicateCandidate, OrganizationDetail } from "@/lib/api-types";
+import type { Created, CustomFieldView, CustomValue, DuplicateCandidate, OrganizationDetail } from "@/lib/api-types";
 import { showError } from "@/lib/hooks";
 import { CONTACT_STATUS_LABELS, ORGANIZATION_TYPE_LABELS } from "@/lib/types";
+import { changedValues, CustomFieldInputs, type CustomDraft, draftFromValues } from "./CustomFieldInputs";
 
 const optional = z.string().trim().max(500).optional();
 
@@ -24,6 +37,8 @@ const schema = z.object({
   country: optional,
   tags: z.string().max(1000).optional(),
   notes: z.string().max(10_000).optional(),
+  reviewed_on: z.string().optional(),
+  qualification_source_url: z.string().trim().max(4000).optional(),
   contacts: z
     .array(
       z.object({
@@ -45,13 +60,31 @@ interface Props {
   onSaved?: (id: string) => void;
 }
 
-const blank: Values = { name: "", website: "", company_type: "unknown", location: "", country: "", tags: "", notes: "", contacts: [] };
+const blank: Values = { name: "", website: "", company_type: "unknown", location: "", country: "", tags: "", notes: "", reviewed_on: "", qualification_source_url: "", contacts: [] };
 
 export function ProspectForm({ open, onOpenChange, existing, onSaved }: Props) {
   const client = useQueryClient();
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: blank });
   const contacts = useFieldArray({ control: form.control, name: "contacts" });
+  const definitions = useQuery({
+    queryKey: ["custom-fields", "prospect"],
+    queryFn: () => api.get<CustomFieldView[]>("/custom-fields", { record_type: "prospect" }),
+    enabled: open && !existing,
+  });
+  const customFields: CustomValue[] = existing
+    ? existing.custom_fields ?? []
+    : (definitions.data ?? []).map((f) => ({ key: f.key, label: f.label, field_type: f.field_type, value: null }));
+  const [customOriginal, setCustomOriginal] = useState<CustomDraft>({});
+  const [custom, setCustom] = useState<CustomDraft>({});
+  const customKey = customFields.map((f) => `${f.key}:${String(f.value)}`).join("|");
+
+  useEffect(() => {
+    if (!open) return;
+    const initial = draftFromValues(customFields);
+    setCustomOriginal(initial);
+    setCustom(initial);
+  }, [open, customKey]); // customFields is rebuilt each render; customKey tracks its content
 
   useEffect(() => {
     if (!open) return;
@@ -66,6 +99,8 @@ export function ProspectForm({ open, onOpenChange, existing, onSaved }: Props) {
             country: existing.country ?? "",
             tags: existing.tags.join(", "),
             notes: existing.notes ?? "",
+            reviewed_on: existing.reviewed_on ?? "",
+            qualification_source_url: existing.qualification_source_url ?? "",
             contacts: [],
           }
         : blank,
@@ -80,6 +115,9 @@ export function ProspectForm({ open, onOpenChange, existing, onSaved }: Props) {
     country: values.country || null,
     tags: (values.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean),
     notes: values.notes || null,
+    reviewed_on: values.reviewed_on || null,
+    qualification_source_url: values.qualification_source_url || null,
+    custom_fields: changedValues(customOriginal, custom),
   });
 
   const save = async (values: Values, allowDuplicate = false) => {
@@ -190,6 +228,13 @@ export function ProspectForm({ open, onOpenChange, existing, onSaved }: Props) {
         <Field label="Notes" className="sm:col-span-2">
           {(p) => <Textarea {...p} {...form.register("notes")} rows={3} />}
         </Field>
+        <Field label="Review date" hint="When this prospect was last reviewed or qualified.">
+          {(p) => <Input {...p} type="date" {...form.register("reviewed_on")} />}
+        </Field>
+        <Field label="Qualification source URL" error={errors.qualification_source_url?.message} hint="The page where you found or qualified this prospect. Saved exactly as entered.">
+          {(p) => <Input {...p} {...form.register("qualification_source_url")} inputMode="url" placeholder="https://…" />}
+        </Field>
+        <CustomFieldInputs fields={customFields} draft={custom} onChange={setCustom} />
 
         {!existing ? (
           <div className="space-y-3 sm:col-span-2">

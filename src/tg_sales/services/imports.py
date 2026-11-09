@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Importing prospect lists: preview, match review, atomic commit and undo.
 
 Workflow:
@@ -17,15 +27,20 @@ Workflow:
 5. :meth:`ImportService.undo` reverses an import using its change log, keeping
    records that were edited after the import.
 
-Existing values are never overwritten: imports only fill empty fields and add
-contacts, games and tags. Conflicting values are reported as warnings.
+By default existing values are never overwritten: imports only fill empty
+fields (including custom fields) and add contacts, games and tags; conflicting
+values are reported as warnings. The user may explicitly choose "replace
+existing values" for a single import; then the file's value replaces a
+different existing value for the replaceable fields (``REPLACEABLE_FIELDS``
+and custom fields; never names, notes, tags or outreach status). Every
+replaced value is kept in the import's change log, so undo restores it.
 """
 
 from __future__ import annotations
 
 import logging
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
@@ -48,6 +63,7 @@ from tg_sales.db.models import (
     Opportunity,
     Organization,
 )
+from tg_sales.domain.custom_fields import RecordType
 from tg_sales.domain.enums import (
     ActivityType,
     ContactStatus,
@@ -118,6 +134,24 @@ _ENUM_FIELDS: dict[str, type[StrEnum]] = {
     "contact_status": ContactStatus,
     "release_precision": ReleasePrecision,
 }
+_DATE_FIELDS = frozenset({"release_date", "reviewed_on"})
+# Fields an import may replace when the user explicitly asks for it.
+REPLACEABLE_FIELDS = frozenset(
+    {
+        "website",
+        "domain",
+        "company_type",
+        "location",
+        "country",
+        "reviewed_on",
+        "qualification_source_url",
+        "role_title",
+        "platform",
+        "store_url",
+        "release_date",
+    }
+)
+_EXACT_FIELDS = frozenset({"qualification_source_url"})  # compared character by character
 
 
 class ImportFailedError(TgSalesError):
@@ -193,6 +227,9 @@ class ImportPlan:
     results: list[RowResult]
     groups: list[ImportGroup]
     previous_imports: list[tuple[datetime, str]] = field(default_factory=list)
+    # Replace differing existing values (REPLACEABLE_FIELDS and custom fields) with the
+    # file's values. Off unless the user explicitly chooses it.
+    overwrite: bool = False
 
     @property
     def issues(self) -> list[RowIssue]:
@@ -227,6 +264,9 @@ class ImportCounts:
     games_created: int = 0
     error_rows: int = 0
     warnings: int = 0
+    rows_imported: int = 0  # source rows whose prospect was created or changed
+    rows_skipped: int = 0  # source rows that changed nothing (skipped or already present)
+    values_replaced: int = 0  # existing values replaced (only with "replace existing values")
 
     @property
     def created(self) -> int:
@@ -351,6 +391,8 @@ class _Context:
     counts: ImportCounts
     issues: list[RowIssue]
     file_name: str
+    overwrite: bool = False
+    custom_labels: dict[str, str] = field(default_factory=dict)  # "<type>:<key>" -> label
 
     def change(
         self,
@@ -397,9 +439,48 @@ def _equivalent(name: str, old: object, new: object) -> bool:
         return domain_from_url(old) == domain_from_url(new) and (
             name == "website" or old.rstrip("/") == new.rstrip("/")
         )
+    if name in _EXACT_FIELDS:
+        return old == new
     if isinstance(old, str) and isinstance(new, str):
         return normalize_name(old) == normalize_name(new)
     return old == new
+
+
+def _fill_custom(
+    ctx: _Context,
+    entity: Organization | Contact,
+    record_type: RecordType,
+    values: Mapping[str, object],
+    row_number: int,
+) -> dict[str, Any]:
+    """Fill empty custom values (or replace differing ones when overwriting).
+
+    Returns ``{"custom_fields": <previous dict>}`` when anything changed, for undo.
+    """
+    current = dict(entity.custom_fields or {})
+    changed = False
+    for key, new in values.items():
+        label = ctx.custom_labels.get(f"{record_type.value}:{key}", key)
+        old = current.get(key)
+        if old is None or old == "":
+            current[key] = new
+            changed = True
+        elif old != new and not _equivalent(key, old, new):
+            if ctx.overwrite:
+                current[key] = new
+                changed = True
+                ctx.counts.values_replaced += 1
+            else:
+                ctx.warn(
+                    row_number,
+                    label,
+                    f"Kept the existing {label}; the file has a different value.",
+                )
+    if not changed:
+        return {}
+    previous = {"custom_fields": dict(entity.custom_fields or {})}
+    entity.custom_fields = current
+    return previous
 
 
 def _fill(
@@ -409,7 +490,11 @@ def _fill(
     row_number: int,
     labels: dict[str, str],
 ) -> dict[str, Any]:
-    """Fill empty attributes; warn about differing values. Returns previous values."""
+    """Fill empty attributes; warn about differing values. Returns previous values.
+
+    With ``ctx.overwrite`` a differing value of a replaceable field is replaced
+    (the old value is returned for undo) instead of only being reported.
+    """
     previous: dict[str, Any] = {}
     for name, new in values.items():
         if new is None or new == "":
@@ -420,9 +505,23 @@ def _fill(
             empty = old is ContactStatus.UNKNOWN
             if new is ContactStatus.UNKNOWN:
                 continue
+        if name == "domain" and not empty:
+            if "website" in previous:  # the website was replaced: its domain follows
+                previous[name] = _stored(old)
+                setattr(entity, name, new)
+            continue
         if empty:
             previous[name] = _stored(old)
             setattr(entity, name, new)
+        elif (
+            ctx.overwrite
+            and name in REPLACEABLE_FIELDS
+            and name in labels
+            and not _equivalent(name, old, new)
+        ):
+            previous[name] = _stored(old)
+            setattr(entity, name, new)
+            ctx.counts.values_replaced += 1
         elif name in labels and not _equivalent(name, old, new):
             ctx.warn(
                 row_number,
@@ -463,13 +562,41 @@ def _merged_games(records: Sequence[ImportRecord]) -> list[tuple[int, GameRecord
     return result
 
 
+ORGANIZATION_LABELS = {
+    "website": "Website",
+    "company_type": "Company type",
+    "location": "Location",
+    "country": "Country",
+    "reviewed_on": "Review date",
+    "qualification_source_url": "Qualification source URL",
+}
+
+
+def _merged_custom(
+    ctx: _Context,
+    record_type: RecordType,
+    rows: Sequence[tuple[int, Mapping[str, object]]],
+) -> dict[str, object]:
+    """Custom values of several rows for one record: the first value of each field wins."""
+    values: dict[str, object] = {}
+    origin: dict[str, int] = {}
+    for row_number, row_values in rows:
+        for key, value in row_values.items():
+            if key not in values:
+                values[key], origin[key] = value, row_number
+            elif values[key] != value:
+                label = ctx.custom_labels.get(f"{record_type.value}:{key}", key)
+                ctx.warn(
+                    row_number,
+                    label,
+                    f"Row {origin[key]} gives a different {label} for this prospect; "
+                    "the first value was used.",
+                )
+    return values
+
+
 def _organization_values(records: Sequence[ImportRecord], ctx: _Context) -> dict[str, Any]:
-    labels = {
-        "website": "Website",
-        "company_type": "Company type",
-        "location": "Location",
-        "country": "Country",
-    }
+    labels = ORGANIZATION_LABELS
     values: dict[str, Any] = {}
     origin: dict[str, int] = {}
     for record in records:
@@ -479,6 +606,8 @@ def _organization_values(records: Sequence[ImportRecord], ctx: _Context) -> dict
             ("company_type", record.company_type),
             ("location", record.location),
             ("country", record.country),
+            ("reviewed_on", record.reviewed_on),
+            ("qualification_source_url", record.qualification_source_url),
         ):
             if value is None:
                 continue
@@ -495,6 +624,9 @@ def _organization_values(records: Sequence[ImportRecord], ctx: _Context) -> dict
     notes = [r.notes for r in records if r.notes]
     values["notes"] = "\n".join(dict.fromkeys(notes)) if notes else None
     values["tags"] = merge_tags((), (t for r in records for t in r.tags))
+    values["custom_fields"] = _merged_custom(
+        ctx, RecordType.PROSPECT, [(r.row_number, r.custom_values) for r in records]
+    )
     return values
 
 
@@ -538,6 +670,7 @@ def _apply_contacts(
                 social_urls=dict(contact.social_urls),
                 source=RecordSource.IMPORT,
                 provenance=f"Imported from {ctx.file_name}",
+                custom_fields=dict(contact.custom_values),
                 **values,
             )
             ctx.session.add(created)
@@ -546,6 +679,7 @@ def _apply_contacts(
             ctx.counts.contacts_created += 1
             continue
         previous = _fill(ctx, match, values, row_number, labels)
+        previous |= _fill_custom(ctx, match, RecordType.CONTACT, contact.custom_values, row_number)
         socials = dict(match.social_urls)
         added = {k: v for k, v in contact.social_urls.items() if v not in socials.values()}
         for key, url in added.items():
@@ -634,6 +768,7 @@ def _apply_group(ctx: _Context, group: ImportGroup) -> None:
     first = records[0]
     if action is PlanAction.SKIP:
         ctx.counts.organizations_skipped += 1
+        ctx.counts.rows_skipped += len(records)
         return
     if action is PlanAction.REVIEW:
         raise ValueError("every group needing review must be decided before importing")
@@ -651,9 +786,13 @@ def _apply_group(ctx: _Context, group: ImportGroup) -> None:
             country=values.get("country"),
             tags=list(values["tags"]),
             notes=values["notes"],
+            reviewed_on=values.get("reviewed_on"),
+            qualification_source_url=values.get("qualification_source_url"),
+            custom_fields=dict(values["custom_fields"]),
             source=RecordSource.IMPORT,
         )
         ctx.session.add(organization)
+        ctx.counts.rows_imported += len(records)
         ctx.change(
             "organizations",
             organization.id,
@@ -692,14 +831,12 @@ def _apply_group(ctx: _Context, group: ImportGroup) -> None:
         previous = _fill(
             ctx,
             organization,
-            {k: v for k, v in values.items() if k not in {"tags"}},
+            {k: v for k, v in values.items() if k not in {"tags", "custom_fields"}},
             first.row_number,
-            {
-                "website": "Website",
-                "company_type": "Company type",
-                "location": "Location",
-                "country": "Country",
-            },
+            ORGANIZATION_LABELS,
+        )
+        previous |= _fill_custom(
+            ctx, organization, RecordType.PROSPECT, values["custom_fields"], first.row_number
         )
         merged = merge_tags(organization.tags, values["tags"])
         if tuple(organization.tags) != merged:
@@ -736,8 +873,10 @@ def _apply_group(ctx: _Context, group: ImportGroup) -> None:
             )
         if previous or changed_children:
             ctx.counts.organizations_updated += 1
+            ctx.counts.rows_imported += len(records)
         else:
             ctx.counts.organizations_skipped += 1
+            ctx.counts.rows_skipped += len(records)
         for record in records:
             ctx.change(
                 "organizations",
@@ -783,8 +922,14 @@ class ImportService:
         options: RecordOptions = RecordOptions(),  # noqa: B008 - immutable default
         token: CancelToken | None = None,
         progress: ProgressCallback | None = None,
+        *,
+        overwrite: bool = False,
     ) -> ImportPlan:
-        """Interpret rows and match them against existing prospects (nothing is saved)."""
+        """Interpret rows and match them against existing prospects (nothing is saved).
+
+        ``overwrite``: replace differing existing values with the file's values
+        (see the module docstring); by default existing values are kept.
+        """
         if progress:
             progress(10, "Checking rows…")
         results = build_records(table.rows, mappings, options, row_numbers=table.row_numbers)
@@ -836,6 +981,7 @@ class ImportService:
             results=results,
             groups=groups,
             previous_imports=previous,
+            overwrite=overwrite,
         )
 
     def _run(
@@ -875,15 +1021,28 @@ class ImportService:
                         started_at_utc=now,
                         mapping={
                             "columns": [
-                                {"header": m.header, "field": m.field.value if m.field else None}
-                                for m in plan.mappings
+                                {"header": m.header, "field": m.target} for m in plan.mappings
                             ],
                             "date_order": plan.options.date_order.value,
+                            "overwrite": plan.overwrite,
                         },
                     )
                 )
                 ledger = ActivityLedger(session, self._actor_id, self._database.clock)
-                ctx = _Context(session, job, ledger, counts, issues, plan.source.name)
+                ctx = _Context(
+                    session,
+                    job,
+                    ledger,
+                    counts,
+                    issues,
+                    plan.source.name,
+                    overwrite=plan.overwrite,
+                    custom_labels={
+                        f"{m.custom.record_type.value}:{m.custom.key}": m.custom.label
+                        for m in plan.mappings
+                        if m.custom is not None
+                    },
+                )
                 total = max(1, len(plan.groups))
                 for number, group in enumerate(plan.groups, start=1):
                     if token is not None:
@@ -1093,7 +1252,7 @@ class ImportService:
             return None
         if name in _ENUM_FIELDS:
             return _ENUM_FIELDS[name](str(value))
-        if name == "release_date" and isinstance(value, str):
+        if name in _DATE_FIELDS and isinstance(value, str):
             return date.fromisoformat(value)
         return value
 

@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Exporting and importing change packages (offline collaboration).
 
 How changes are tracked
@@ -129,6 +139,10 @@ def from_json(table: Table, data: Mapping[str, Any]) -> dict[str, Any]:
         if name not in data:
             if column.nullable:
                 out[name] = None
+                continue
+            if isinstance(column.type, JSON):
+                # Added in a later version (e.g. custom field values): empty, not invalid.
+                out[name] = {}
                 continue
             raise _Invalid(f"{name} is missing")
         value = data[name]

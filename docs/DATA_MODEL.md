@@ -1,6 +1,6 @@
 # tg_sales Data Model
 
-**Schema revision: `0001`** (PostgreSQL Alembic revision in
+**Schema revision: `0002`** (PostgreSQL Alembic revision in
 `src/tg_sales/db/migrations_pg/versions/`).
 
 This document describes every table and column in the tg_sales PostgreSQL
@@ -12,8 +12,8 @@ revision history at the end.
 Databases from the earlier desktop version (SQLite, desktop revisions
 `0001`–`0005`) are not opened directly; they are transferred into PostgreSQL
 by the desktop-data transfer (see [MIGRATION.md](MIGRATION.md)). Their tables
-and columns are the same as the PostgreSQL tables below, except the four
-tables marked *(new in the web version)*.
+and columns are the same as the PostgreSQL tables below, except the tables
+and columns marked *(new in the web version)*.
 
 ## Conventions
 
@@ -116,6 +116,9 @@ Studios, publishers, data buyers and other companies.
 | `tags` | JSON list | User labels |
 | `notes` | text, nullable | |
 | `archived_at_utc` | timestamp, nullable | Set when archived (hidden from the list, reversible); `NULL` = active |
+| `reviewed_on` | date, nullable | When the prospect was last reviewed or qualified; not a contact or follow-up date *(new in the web version, 0002)* |
+| `qualification_source_url` | text, nullable | Page where the prospect was found or qualified, kept exactly as entered (query and `#fragment` included); only `http(s)` addresses. Separate from `source`, which says how the record entered the CRM *(0002)* |
+| `custom_fields` | JSON object | Values of custom fields by field key, e.g. `{"account_tier": "Tier 1"}` (see `custom_fields` table); `{}` when none *(0002)* |
 
 Indexes: `normalized_name`, `domain`, `created_at_utc`, `updated_at_utc`.
 
@@ -143,6 +146,7 @@ People at an organization. Only business contact details are stored.
 | `source_url` | text, nullable | Public page where the contact information was found |
 | `source` | enum | As for organizations |
 | `archived_at_utc` | timestamp, nullable | Set when archived; `NULL` = active |
+| `custom_fields` | JSON object | Values of contact custom fields by key; `{}` when none *(0002)* |
 
 Indexes: `organization_id`, `email_normalized`, `created_at_utc`, `updated_at_utc`.
 
@@ -182,7 +186,7 @@ Interested, Technical Review, Negotiation, Won, Lost, Not a Fit.
 |--------|------|-------|
 | `name` | text | User-visible label |
 | `sort_order` | integer | Display order |
-| `product_lane` | enum, nullable | Restricts the stage to one lane; `NULL` = all lanes |
+| `product_lane` | text(32), nullable | Key of the sales lane the stage is limited to (`sales_lanes.key`); `NULL` = all lanes |
 | `outcome` | enum | `open`, `won`, `lost`, `not_a_fit`; anything but `open` is terminal |
 | `archived_at_utc` | timestamp, nullable | Archived stages are hidden but keep their history |
 
@@ -191,14 +195,55 @@ Archiving a stage first moves its opportunities (with normal `stage_change`
 events). At least one open stage for all lanes must remain, and a stage's
 `outcome` cannot change while it holds opportunities.
 
+### `sales_lanes`
+
+*(0002)* The business categories of opportunities ("lanes"), such as
+"Consulting" or "Data licensing". Lanes are not stages: every lane uses the
+same stages, and a stage may be limited to one lane.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `key` | text(32) | Permanent identifier stored in `opportunities.product_lane` and `pipeline_stages.product_lane`; never changes, so renaming keeps all records and history (unique) |
+| `name` | text | Display name (renamable) |
+| `description` | text, nullable | |
+| `color` | text(16), nullable | `#rrggbb`, always shown with the name |
+| `sort_order` | integer | Display order |
+| `technical_handoff` | boolean | Offers the technical-review handoff summary on its opportunities |
+| `archived_at_utc` | timestamp, nullable | Archived lanes are hidden from new opportunities; their records stay |
+
+The `id` is derived from the key (`uuid5`), so the same lane created on two
+computers is one record after sync. Revision `0002` creates, for an existing
+installation (one that already has prospects, opportunities, activity or
+lane-specific stages), the original lanes `data_licensing` (Data licensing),
+`publisher_partnership` (Publisher partnership) and `mikros_marketing` (MIKROS
+Marketing); for a new installation `general_sales`, `partnerships` and
+`other`. Any other key already used by a record also gets a lane. A lane can be
+deleted (tombstoned) only when no opportunity or stage uses it.
+
+### `custom_fields`
+
+*(0002)* User-defined fields for prospects and contacts.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `record_type` | text(16) | `prospect` (organizations) or `contact` |
+| `key` | text(64) | Permanent key under which values are stored in the record's `custom_fields` JSON (unique with `record_type`) |
+| `label` | text | Display name (renamable) |
+| `field_type` | text(16) | `text`, `number`, `date` (ISO string), `url` (http(s), kept exactly) or `boolean`; never changes |
+| `description` | text, nullable | |
+| `sort_order` | integer | Display order |
+| `archived_at_utc` | timestamp, nullable | Archived fields are hidden from forms, imports and exports; values are kept |
+
+The `id` is derived from record type and key (`uuid5`), like lanes.
+
 ### `opportunities`
 
-A potential deal with an organization in one product lane.
+A potential deal with an organization in one sales lane.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | `organization_id` | FK → organizations | (indexed) |
-| `product_lane` | enum | `data_licensing`, `publisher_partnership`, `mikros_marketing` (indexed) |
+| `product_lane` | text(32) | Key of the opportunity's sales lane (`sales_lanes.key`; indexed). Checked against active lanes when an opportunity is created |
 | `stage_id` | FK → pipeline_stages | Current stage (indexed); history lives in `activities` |
 | `owner_actor_id` | FK → actors, nullable | (indexed) |
 | `title` | text, nullable | |
@@ -563,6 +608,7 @@ run), `current_actor_id`.
 
 | Revision | Summary |
 |----------|---------|
+| `0002` (PostgreSQL) | Configurable sales lanes (`sales_lanes`, seeded as described there), `custom_fields`; `organizations.reviewed_on`, `organizations.qualification_source_url`, `organizations.custom_fields`, `contacts.custom_fields`; change-log triggers on the new tables. No existing row is changed |
 | `0001` (PostgreSQL) | Baseline for the web version: every table above, partial unique indexes, deferrable foreign keys, activity immutability and change-log triggers, default pipeline stages |
 
 Desktop (SQLite) history, for databases transferred from the earlier version:

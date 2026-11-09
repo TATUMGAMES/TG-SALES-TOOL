@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
@@ -125,7 +135,7 @@ def test_lane_specific_stage_rules(pipeline: PipelineService, org: str) -> None:
         "Data room review", lane=LANE, after_stage_id=STAGE["interested"]
     )
     marketing = new_opp(pipeline, org, ProductLane.MIKROS_MARKETING)
-    with pytest.raises(PipelineError, match="product lane"):
+    with pytest.raises(PipelineError, match="sales lane"):
         pipeline.move(marketing, lane_stage)
     data = new_opp(pipeline, org)
     assert pipeline.move(data, lane_stage)
@@ -336,7 +346,7 @@ def test_technical_handoff_draft(pipeline: PipelineService, org: str) -> None:
         and "sent" not in detail.activities[0].summary.split(":")[0]
     )
     marketing = new_opp(pipeline, org, ProductLane.MIKROS_MARKETING)
-    with pytest.raises(PipelineError, match="data-licensing"):
+    with pytest.raises(PipelineError, match="handoffs are not turned on"):
         pipeline.handoff_draft(marketing)
 
 
@@ -344,7 +354,7 @@ def test_create_validation_and_choices(pipeline: PipelineService, org: str) -> N
     with pytest.raises(PipelineError, match="no longer exists"):
         pipeline.create_opportunity(OpportunityDraft("missing", LANE, STAGE["discovered"]))
     lane_stage = pipeline.create_stage("Marketing brief", lane=ProductLane.MIKROS_MARKETING)
-    with pytest.raises(PipelineError, match="product lane"):
+    with pytest.raises(PipelineError, match="sales lane"):
         pipeline.create_opportunity(OpportunityDraft(org, LANE, lane_stage))
     assert pipeline.organization_choices("pixel") == [(org, "Pixel Forge")]
     assert pipeline.organization_choices("100%") == []

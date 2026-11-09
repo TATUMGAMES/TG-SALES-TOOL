@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, DatabaseBackup, Download, FileUp, FolderOpen, HardDriveDownload, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +26,9 @@ import { formatBytes, formatDateTime, humanize } from "@/lib/format";
 import { showError, useAction, useInfo } from "@/lib/hooks";
 import { useJob } from "@/lib/jobs";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
+import { BrandingPanel } from "./BrandingPanel";
+import { CustomFieldsPanel } from "./CustomFieldsPanel";
+import { LanesPanel } from "./LanesPanel";
 import { SyncPanel } from "./SyncPanel";
 
 function GeneralPanel() {
@@ -256,6 +271,14 @@ function AboutPanel() {
         <p className="sm:col-span-2"><span className="text-muted-foreground">Sync ID: </span><code className="text-xs">{info.data?.device_id}</code></p>
         {info.data?.data_folder ? <p className="sm:col-span-2"><span className="text-muted-foreground">Data folder: </span>{info.data.data_folder}</p> : null}
       </Card>
+      <Card className="space-y-1 p-4 text-sm">
+        <p className="font-medium">TG Sales CRM · Copyright 2013-present Tatum Games, LLC.</p>
+        <p className="text-muted-foreground">
+          Open-source software licensed under the{" "}
+          <a className="text-primary underline-offset-2 hover:underline" href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer">Apache License, Version 2.0</a>.
+          The license does not grant use of the Tatum Games names and logos; your company branding (Settings › Branding) and your CRM data are your own. See the LICENSE, NOTICE and TRADEMARKS.md files.
+        </p>
+      </Card>
       {info.data?.desktop_integration ? (
         <Card className="flex flex-wrap gap-2 p-4">
           {["data", "backups", "reports", "snapshots", "logs"].map((folder) => (
@@ -283,16 +306,22 @@ export function SettingsPage() {
   const tab = params.get("tab") ?? "general";
   return (
     <div>
-      <PageHeader title="Settings & Sync" description="Your preferences, collaboration with colleagues, backups and more." />
+      <PageHeader title="Settings & Sync" description="Your preferences, company branding, sales lanes, custom fields, collaboration, backups and more." />
       <Tabs value={tab} onValueChange={(value) => setParams({ tab: value })}>
-        <TabsList className="mb-5">
+        <TabsList className="mb-5 max-w-full overflow-x-auto">
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="branding">Branding</TabsTrigger>
+          <TabsTrigger value="lanes">Sales lanes</TabsTrigger>
+          <TabsTrigger value="fields">Custom fields</TabsTrigger>
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="backups">Backups</TabsTrigger>
           <TabsTrigger value="desktop">Desktop data</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
         <TabsContent value="general"><GeneralPanel /></TabsContent>
+        <TabsContent value="branding"><BrandingPanel /></TabsContent>
+        <TabsContent value="lanes"><LanesPanel /></TabsContent>
+        <TabsContent value="fields"><CustomFieldsPanel /></TabsContent>
         <TabsContent value="sync"><SyncPanel /></TabsContent>
         <TabsContent value="backups"><BackupsPanel /></TabsContent>
         <TabsContent value="desktop"><DesktopPanel /></TabsContent>

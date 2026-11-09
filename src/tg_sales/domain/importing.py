@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Import rules: column mapping, value interpretation and row validation.
 
 These functions are pure. They turn a parsed table (headers plus rows of cell
@@ -5,6 +15,11 @@ values) into validated :class:`ImportRecord` objects with row-level issues,
 without touching files or the database. Nothing is guessed: ambiguous headers
 are left unmapped, ambiguous dates are reported, and outreach status is only
 taken from an explicit column (never inferred from the presence of an email).
+
+Besides the built-in fields, a column can be mapped to a user-defined custom
+field (see :mod:`tg_sales.domain.custom_fields`). Values that do not fit the
+field's type are reported as warnings and left out; nothing is silently
+dropped or changed.
 """
 
 from __future__ import annotations
@@ -16,11 +31,19 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 
+from tg_sales.domain.custom_fields import (
+    CustomFieldInfo,
+    FieldType,
+    InvalidValueError,
+    RecordType,
+    parse_value,
+)
 from tg_sales.domain.enums import ContactStatus, OrganizationType, ReleasePrecision
 from tg_sales.domain.normalization import (
     DateOrder,
     Flag,
     domain_from_url,
+    exact_url,
     looks_like_formula,
     normalize_email,
     normalize_name,
@@ -59,6 +82,8 @@ class ImportField(StrEnum):
     RELEASE_DATE = "release_date"
     PLATFORM = "platform"
     STORE_URL = "store_url"
+    REVIEW_DATE = "review_date"
+    QUALIFICATION_SOURCE_URL = "qualification_source_url"
 
 
 @dataclass(frozen=True)
@@ -197,6 +222,37 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
         "Store page URL",
         ("store url", "steam url", "steam link", "store link", "steam page", "store page"),
     ),
+    FieldSpec(
+        ImportField.REVIEW_DATE,
+        "Review date",
+        (
+            "reviewed on",
+            "review date",
+            "last reviewed",
+            "date reviewed",
+            "reviewed date",
+            "last review date",
+            "last review",
+            "reviewed",
+        ),
+    ),
+    FieldSpec(
+        ImportField.QUALIFICATION_SOURCE_URL,
+        "Qualification source URL",
+        (
+            "qualification source url",
+            "qualification source",
+            "qualification url",
+            "qualification link",
+            "source url",
+            "source link",
+            "research url",
+            "research link",
+            "reference url",
+            "reference link",
+            "evidence url",
+        ),
+    ),
 )
 SPEC_BY_FIELD: dict[ImportField, FieldSpec] = {spec.field: spec for spec in FIELD_SPECS}
 
@@ -214,13 +270,34 @@ CONFIDENCE_PARTIAL = 0.6
 
 @dataclass(frozen=True)
 class ColumnMapping:
-    """Suggested or chosen target for one source column."""
+    """Suggested or chosen target for one source column.
+
+    The target is a built-in ``field`` or a ``custom`` field (never both).
+    """
 
     column: int
     header: str
     field: ImportField | None
     confidence: float = 0.0
     note: str = ""
+    custom: CustomFieldInfo | None = None
+
+    @property
+    def target(self) -> str | None:
+        """The target as text: a field value or ``custom:<record type>:<key>``."""
+        if self.custom is not None:
+            return self.custom.target
+        return self.field.value if self.field is not None else None
+
+    def target_label(self) -> str:
+        if self.custom is not None:
+            return self.custom.label
+        return SPEC_BY_FIELD[self.field].label if self.field is not None else ""
+
+
+def custom_header_key(text: str) -> str:
+    """How headers and custom field labels are compared (ignoring case and punctuation)."""
+    return normalize_name(text.replace("_", " "))
 
 
 def _looks_like_email_column(samples: Sequence[CellValue]) -> bool:
@@ -242,20 +319,33 @@ def _partial_matches(header: str) -> list[ImportField]:
 
 
 def suggest_mapping(
-    headers: Sequence[str], samples: Sequence[Sequence[CellValue]] = ()
+    headers: Sequence[str],
+    samples: Sequence[Sequence[CellValue]] = (),
+    custom_fields: Sequence[CustomFieldInfo] = (),
 ) -> list[ColumnMapping]:
     """Suggest a target field for every column, with confidence and notes.
 
     ``samples`` are the first data rows; they are only used to resolve a few
-    ambiguous headers (for example "Contact" holding email addresses).
+    ambiguous headers (for example "Contact" holding email addresses). A header
+    matching the label (or key) of an active custom field is suggested for that
+    field, since the user created it for exactly this kind of column.
     """
     exact = {s: spec.field for spec in FIELD_SPECS for s in spec.synonyms}
+    by_label: dict[str, CustomFieldInfo] = {}
+    for custom in custom_fields:
+        if not custom.archived:
+            by_label.setdefault(custom_header_key(custom.label), custom)
+            by_label.setdefault(custom_header_key(custom.key), custom)
     proposals: list[ColumnMapping] = []
     ambiguous: list[int] = []
     for column, header in enumerate(headers):
         key = normalize_name(header)
         if not key:
             proposals.append(ColumnMapping(column, header, None, note="Column has no header."))
+        elif (info := by_label.get(custom_header_key(header))) is not None:
+            proposals.append(
+                ColumnMapping(column, header, None, CONFIDENCE_EXACT, "Custom field.", info)
+            )
         elif key in exact:
             proposals.append(ColumnMapping(column, header, exact[key], CONFIDENCE_EXACT))
         elif key in AMBIGUOUS_HEADERS:
@@ -270,7 +360,7 @@ def suggest_mapping(
         else:
             proposals.append(ColumnMapping(column, header, None, note="Not recognized."))
 
-    mapped = {p.field for p in proposals if p.field is not None}
+    mapped: set[ImportField] = {p.field for p in proposals if p.field is not None}
     for column in ambiguous:
         header = proposals[column].header
         key = normalize_name(header)
@@ -299,23 +389,34 @@ def suggest_mapping(
     return resolve_duplicate_targets(proposals)
 
 
+def _single_target(m: ColumnMapping) -> str | None:
+    """The target of ``m`` when only one column may use it (always for custom fields)."""
+    if m.custom is not None:
+        return m.custom.target
+    if m.field is None or SPEC_BY_FIELD[m.field].multiple:
+        return None
+    return m.field.value
+
+
 def resolve_duplicate_targets(mappings: Sequence[ColumnMapping]) -> list[ColumnMapping]:
-    """Keep only the most confident column for each single-column field."""
-    best: dict[ImportField, ColumnMapping] = {}
+    """Keep only the most confident column for each single-column field.
+
+    The other columns are left unmapped with a note saying why, so the user
+    sees them and can choose another target.
+    """
+    best: dict[str, ColumnMapping] = {}
     for m in mappings:
-        if m.field is None or SPEC_BY_FIELD[m.field].multiple:
+        target = _single_target(m)
+        if target is None:
             continue
-        current = best.get(m.field)
+        current = best.get(target)
         if current is None or m.confidence > current.confidence:
-            best[m.field] = m
+            best[target] = m
     result = []
     for m in mappings:
-        if (
-            m.field is not None
-            and not SPEC_BY_FIELD[m.field].multiple
-            and best[m.field].column != m.column
-        ):
-            note = f"Another column is already mapped to {SPEC_BY_FIELD[m.field].label}."
+        target = _single_target(m)
+        if target is not None and best[target].column != m.column:
+            note = f"Another column is already mapped to {m.target_label()}."
             result.append(ColumnMapping(m.column, m.header, None, 0.0, note))
         else:
             result.append(m)
@@ -328,9 +429,16 @@ def mapping_problems(mappings: Sequence[ColumnMapping]) -> list[str]:
     targets = [m.field for m in mappings if m.field is not None]
     if ImportField.ORGANIZATION_NAME not in targets:
         problems.append("Choose the column that holds the studio or company name.")
-    for f in set(targets):
-        if not SPEC_BY_FIELD[f].multiple and targets.count(f) > 1:
-            problems.append(f"Only one column can be mapped to {SPEC_BY_FIELD[f].label}.")
+    singles: list[str] = []
+    labels: dict[str, str] = {}
+    for m in mappings:
+        target = _single_target(m)
+        if target is not None:
+            singles.append(target)
+            labels[target] = m.target_label()
+    for target in set(singles):
+        if singles.count(target) > 1:
+            problems.append(f"Only one column can be mapped to {labels[target]}.")
     return sorted(problems)
 
 
@@ -355,6 +463,7 @@ class ContactRecord:
     social_urls: Mapping[str, str]
     status: ContactStatus
     notes: str | None
+    custom_values: Mapping[str, object] = field(default_factory=dict)  # by field key
 
 
 @dataclass(frozen=True)
@@ -380,6 +489,9 @@ class ImportRecord:
     contacts: tuple[ContactRecord, ...]
     game: GameRecord | None
     fingerprint: str
+    reviewed_on: date | None = None
+    qualification_source_url: str | None = None
+    custom_values: Mapping[str, object] = field(default_factory=dict)  # by field key
 
 
 @dataclass
@@ -447,8 +559,11 @@ class _RowReader:
         self.options = options
         self.issues: list[RowIssue] = []
         self.columns: dict[ImportField, list[ColumnMapping]] = {}
+        self.custom: list[ColumnMapping] = []
         for m in mappings:
-            if m.field is not None:
+            if m.custom is not None:
+                self.custom.append(m)
+            elif m.field is not None:
                 self.columns.setdefault(m.field, []).append(m)
 
     def issue(self, severity: IssueSeverity, column: str, message: str) -> None:
@@ -493,6 +608,36 @@ class _RowReader:
     def header(self, f: ImportField) -> str:
         columns = self.columns.get(f)
         return columns[0].header if columns else SPEC_BY_FIELD[f].label
+
+    def custom_values(self, record_type: RecordType) -> dict[str, object]:
+        """Validated values of the custom-field columns for ``record_type``, by key."""
+        values: dict[str, object] = {}
+        for m in self.custom:
+            info = m.custom
+            if info is None or info.record_type is not record_type:
+                continue
+            raw = self.cells[m.column] if m.column < len(self.cells) else None
+            if info.field_type is FieldType.TEXT:
+                text = cell_text(raw)
+                if text is not None and looks_like_formula(text):
+                    self.issue(
+                        IssueSeverity.WARNING,
+                        m.header,
+                        "Starts like a spreadsheet formula; kept as plain text, never calculated.",
+                    )
+                raw = text
+            try:
+                value = parse_value(info.field_type, raw, date_order=self.options.date_order)
+            except InvalidValueError as exc:
+                self.issue(
+                    IssueSeverity.WARNING,
+                    m.header,
+                    f"{exc} “{info.label}” was left empty for this row.",
+                )
+                continue
+            if value is not None:
+                values[info.key] = value
+        return values
 
 
 def fingerprint(values: Mapping[str, object]) -> str:
@@ -568,11 +713,13 @@ def _contacts(reader: _RowReader) -> list[ContactRecord]:
 
     socials = _social_urls(reader)
     status = _contact_status(reader)
+    custom = reader.custom_values(RecordType.CONTACT)
 
     names = split_list(full_name) if full_name and (";" in full_name or "\n" in full_name) else []
     if len(emails) > 1 and len(names) == len(emails):
         return [
-            ContactRecord(n, role, e, {}, status, notes) for n, e in zip(names, emails, strict=True)
+            ContactRecord(n, role, e, {}, status, notes, custom)
+            for n, e in zip(names, emails, strict=True)
         ]
     if len(emails) > 1:
         reader.issue(
@@ -599,8 +746,15 @@ def _contacts(reader: _RowReader) -> list[ContactRecord]:
                 reader.header(ImportField.CONTACTED),
                 "Contacted status ignored because the row has no contact.",
             )
+        if custom:
+            reader.issue(
+                IssueSeverity.WARNING,
+                next(m.header for m in reader.custom if m.custom and m.custom.key in custom),
+                "Contact custom fields ignored because the row has no contact name, email or "
+                "social link.",
+            )
         return []
-    return [ContactRecord(full_name, role, email, socials, status, notes)]
+    return [ContactRecord(full_name, role, email, socials, status, notes, custom)]
 
 
 def _game(reader: _RowReader) -> GameRecord | None:
@@ -641,6 +795,49 @@ def _game(reader: _RowReader) -> GameRecord | None:
     return GameRecord(title, release, precision, platform, store_url)
 
 
+def _review_date(reader: _RowReader) -> date | None:
+    raw = reader.raw(ImportField.REVIEW_DATE)
+    if not raw:
+        return None
+    header, value = raw[0]
+    if cell_text(value) is None:
+        return None
+    parsed = parse_date(value, reader.options.date_order)
+    if parsed.ambiguous:
+        reader.issue(
+            IssueSeverity.WARNING,
+            header,
+            "Review date could be day/month or month/day; left empty. Choose the date "
+            "order on the mapping step to read it.",
+        )
+        return None
+    if parsed.value is None:
+        reader.issue(IssueSeverity.WARNING, header, "Review date not recognized; left empty.")
+        return None
+    if parsed.precision is not ReleasePrecision.DAY:
+        reader.issue(
+            IssueSeverity.WARNING,
+            header,
+            "Review date is not a full date (day, month and year); left empty.",
+        )
+        return None
+    return parsed.value
+
+
+def _qualification_url(reader: _RowReader) -> str | None:
+    text = reader.first(ImportField.QUALIFICATION_SOURCE_URL)
+    if text is None:
+        return None
+    url = exact_url(text)
+    if url is None:
+        reader.issue(
+            IssueSeverity.WARNING,
+            reader.header(ImportField.QUALIFICATION_SOURCE_URL),
+            "Not a valid web address (http or https); the qualification source was left empty.",
+        )
+    return url
+
+
 def build_record(
     row_number: int,
     cells: Sequence[CellValue],
@@ -679,6 +876,9 @@ def build_record(
     location = reader.first(ImportField.LOCATION)
     country = reader.first(ImportField.COUNTRY)
     notes = reader.joined(ImportField.ORGANIZATION_NOTES)
+    reviewed_on = _review_date(reader)
+    qualification_url = _qualification_url(reader)
+    custom = reader.custom_values(RecordType.PROSPECT)
 
     if name is None:
         reader.issue(
@@ -688,7 +888,7 @@ def build_record(
         )
         return RowResult(row_number, None, reader.issues)
 
-    content = {
+    content: dict[str, object] = {
         "name": normalize_name(name),
         "website": website,
         "type": company_type,
@@ -704,6 +904,17 @@ def build_record(
         if game is None
         else [game.title, game.release_date, game.release_precision, game.platform, game.store_url],
     }
+    # Newer fields are added only when present, so rows that do not use them keep
+    # the fingerprint they had before (re-imports are still recognized).
+    if reviewed_on is not None:
+        content["reviewed_on"] = reviewed_on
+    if qualification_url is not None:
+        content["qualification_source_url"] = qualification_url
+    if custom:
+        content["custom"] = sorted(custom.items())
+    contact_custom = [sorted(c.custom_values.items()) for c in contacts if c.custom_values]
+    if contact_custom:
+        content["contact_custom"] = contact_custom
     record = ImportRecord(
         row_number=row_number,
         organization_name=name,
@@ -717,6 +928,9 @@ def build_record(
         contacts=tuple(contacts),
         game=game,
         fingerprint=fingerprint(content),
+        reviewed_on=reviewed_on,
+        qualification_source_url=qualification_url,
+        custom_values=custom,
     )
     return RowResult(row_number, record, reader.issues)
 

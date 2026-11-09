@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Globally unique identifiers.
 
 Records get UUIDv7 identifiers (RFC 9562): 48 bits of Unix milliseconds
@@ -14,9 +24,16 @@ from __future__ import annotations
 import secrets
 import time
 import uuid
+from datetime import UTC, datetime
 
 # Fixed namespace for deterministic identifiers of built-in records.
 TG_SALES_NAMESPACE = uuid.UUID("5f0b6d0e-8c1a-4c3e-9a57-3b0d2f9c7e41")
+
+# Bookkeeping of records with deterministic ids (shared stages, lanes, custom
+# fields): the same on every computer, so the same record created on two
+# computers is identical and merges in sync instead of conflicting.
+SYSTEM_DEVICE_ID = "00000000-0000-0000-0000-000000000000"
+SHARED_RECORD_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 _MAX_TIMESTAMP_MS = (1 << 48) - 1
 

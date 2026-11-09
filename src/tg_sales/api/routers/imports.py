@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """File import workflow: upload → read sheet → map columns → plan → decide → commit.
 
 The uploaded file is kept in a private staging folder only while the import is
@@ -25,6 +35,12 @@ from pydantic import BaseModel, Field
 from tg_sales.api.context import AppContext
 from tg_sales.api.deps import Body, Ctx, JobRef, Ok, Svc, job_ref
 from tg_sales.api.security import NotFoundError
+from tg_sales.domain.custom_fields import (
+    FIELD_TYPE_LABELS,
+    RECORD_TYPE_LABELS,
+    CustomFieldInfo,
+    FieldType,
+)
 from tg_sales.domain.importing import (
     FIELD_SPECS,
     ColumnMapping,
@@ -132,9 +148,37 @@ class UploadResult(BaseModel):
 
 
 class FieldView(BaseModel):
-    field: str
+    field: str  # a built-in field, or "custom:<record type>:<key>"
     label: str
     multiple: bool
+    group: str = "Standard fields"
+    value_type: str = "text"  # text, number, date, url, boolean (used for sample checks)
+    custom: bool = False
+
+
+# Value types of built-in fields, so the mapping step can check sample values.
+_BUILT_IN_TYPES = {
+    ImportField.WEBSITE: FieldType.URL,
+    ImportField.LINKEDIN: FieldType.URL,
+    ImportField.TWITTER: FieldType.URL,
+    ImportField.SOCIAL: FieldType.URL,
+    ImportField.STORE_URL: FieldType.URL,
+    ImportField.QUALIFICATION_SOURCE_URL: FieldType.URL,
+    ImportField.RELEASE_DATE: FieldType.DATE,
+    ImportField.REVIEW_DATE: FieldType.DATE,
+    ImportField.CONTACTED: FieldType.BOOLEAN,
+}
+
+
+def _custom_view(info: CustomFieldInfo) -> FieldView:
+    return FieldView(
+        field=info.target,
+        label=f"{info.label} ({FIELD_TYPE_LABELS[info.field_type].lower()})",
+        multiple=False,
+        group=f"Custom fields: {RECORD_TYPE_LABELS[info.record_type].lower()}",
+        value_type=info.field_type.value,
+        custom=True,
+    )
 
 
 class MappingView(BaseModel):
@@ -163,12 +207,38 @@ class ReadIn(Body):
 
 class MappingIn(Body):
     column: int = Field(ge=0)
-    field: ImportField | None
+    # A built-in field value, "custom:<record type>:<key>", or null for "Don't import".
+    field: str | None = Field(default=None, max_length=100)
 
 
 class PlanIn(Body):
     mappings: list[MappingIn] = Field(max_length=200)
     date_order: DateOrder = DateOrder.AUTO
+    # Replace differing existing values with the file's values (never names, notes,
+    # tags or outreach status). Off by default: imports only fill empty fields.
+    overwrite: bool = False
+
+
+def _resolve_target(
+    target: str | None, custom: dict[str, CustomFieldInfo]
+) -> tuple[ImportField | None, CustomFieldInfo | None]:
+    if not target:
+        return None, None
+    if target.startswith("custom:"):
+        info = custom.get(target)
+        if info is None:
+            raise TgSalesError(
+                "One of the chosen custom fields no longer exists or is archived.",
+                action="Choose the column's field again.",
+            )
+        return None, info
+    try:
+        return ImportField(target), None
+    except ValueError as exc:
+        raise TgSalesError(
+            f"“{target}” is not a field that can be imported.",
+            action="Choose a field from the list.",
+        ) from exc
 
 
 class DecisionIn(Body):
@@ -218,6 +288,7 @@ def _plan_view(plan: ImportPlan) -> dict[str, Any]:
         "unresolved": len(plan.unresolved),
         "error_rows": len(plan.error_rows),
         "blank_rows": plan.blank_rows,
+        "overwrite": plan.overwrite,
         "issues": [
             {
                 "row": i.row_number,
@@ -236,8 +307,18 @@ def _plan_view(plan: ImportPlan) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- routes
 @router.get("/imports/fields", response_model=list[FieldView])
-def fields() -> list[FieldView]:
-    return [FieldView(field=s.field.value, label=s.label, multiple=s.multiple) for s in FIELD_SPECS]
+def fields(svc: Svc) -> list[FieldView]:
+    """Every field a column can be imported into: built-in fields, then active custom fields."""
+    built_in = [
+        FieldView(
+            field=s.field.value,
+            label=s.label,
+            multiple=s.multiple,
+            value_type=_BUILT_IN_TYPES.get(s.field, FieldType.TEXT).value,
+        )
+        for s in FIELD_SPECS
+    ]
+    return built_in + [_custom_view(f) for f in svc.custom_fields.list(include_archived=False)]
 
 
 @router.post("/imports/upload", response_model=UploadResult)
@@ -282,14 +363,15 @@ async def upload(file: UploadFile, ctx: Ctx) -> UploadResult:
 
 
 @router.post("/imports/{session_id}/read", response_model=JobRef)
-def read(session_id: str, body: ReadIn, ctx: Ctx) -> JobRef:
+def read(session_id: str, body: ReadIn, ctx: Ctx, svc: Svc) -> JobRef:
     session = sessions_for(ctx).get(session_id)
+    custom = svc.custom_fields.list(include_archived=False)
 
     def work(token, progress):  # type: ignore[no-untyped-def]
         table = read_table(session.source, body.sheet, token, progress)
         session.table, session.plan = table, None
         session.suggestions = (
-            suggest_mapping(table.headers, table.rows[:50]) if table.reliable else []
+            suggest_mapping(table.headers, table.rows[:50], custom) if table.reliable else []
         )
         return TableView(
             headers=table.headers,
@@ -304,7 +386,7 @@ def read(session_id: str, body: ReadIn, ctx: Ctx) -> JobRef:
                 MappingView(
                     column=m.column,
                     header=m.header,
-                    field=m.field.value if m.field else None,
+                    field=m.target,
                     confidence=m.confidence,
                     note=m.note,
                 )
@@ -321,11 +403,15 @@ def plan(session_id: str, body: PlanIn, ctx: Ctx, svc: Svc) -> JobRef:
     if session.table is None:
         raise TgSalesError("Read the file first.", action="Go back to the first step.")
     headers = session.table.headers
-    mappings = [
-        ColumnMapping(m.column, headers[m.column] if m.column < len(headers) else "", m.field, 1.0)
-        for m in body.mappings
-        if m.column < len(headers)
-    ]
+    custom = {f.target: f for f in svc.custom_fields.list(include_archived=False)}
+    mappings = []
+    for m in body.mappings:
+        if m.column >= len(headers):
+            continue
+        built_in, custom_field = _resolve_target(m.field, custom)
+        mappings.append(
+            ColumnMapping(m.column, headers[m.column], built_in, 1.0, custom=custom_field)
+        )
     problems = mapping_problems(mappings)
     if problems:
         raise TgSalesError(problems[0], action="Adjust the column choices and continue.")
@@ -339,6 +425,7 @@ def plan(session_id: str, body: PlanIn, ctx: Ctx, svc: Svc) -> JobRef:
             RecordOptions(date_order=body.date_order),
             token,
             progress,
+            overwrite=body.overwrite,
         )
         session.plan = planned
         return _plan_view(planned)
@@ -382,6 +469,10 @@ def _outcome(outcome: Any) -> dict[str, Any]:
             "games_created": counts.games_created,
             "error_rows": counts.error_rows,
             "warnings": counts.warnings,
+            "rows_imported": counts.rows_imported,
+            "rows_skipped": counts.rows_skipped,
+            "rows_failed": counts.error_rows,
+            "values_replaced": counts.values_replaced,
         },
         "issues": [
             {

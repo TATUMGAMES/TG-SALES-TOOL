@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Prospect management: organizations with their contacts, games and history.
 
 Every change is written in one transaction together with an activity event,
@@ -7,9 +17,9 @@ archived rather than deleted; archiving is reversible.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,10 +27,19 @@ from sqlalchemy.orm import Session
 
 from tg_sales.db.database import Database
 from tg_sales.db.models import Contact, Game, GameOrganization, Organization
+from tg_sales.domain.custom_fields import (
+    CustomFieldInfo,
+    InvalidValueError,
+    RecordType,
+    clean_values,
+    display_value,
+    merged,
+)
 from tg_sales.domain.enums import ActivityType, ContactStatus, RecordSource
 from tg_sales.domain.normalization import (
     core_name,
     domain_from_url,
+    exact_url,
     identifying_domain,
     normalize_email,
     normalize_name,
@@ -29,6 +48,7 @@ from tg_sales.domain.normalization import (
 from tg_sales.domain.prospects import (
     ContactDraft,
     ContactInfo,
+    CustomValue,
     DuplicateCandidate,
     GameDraft,
     GameInfo,
@@ -54,6 +74,7 @@ from tg_sales.repositories.prospects import (
     OrganizationRepository,
 )
 from tg_sales.services.csv_export import write_csv
+from tg_sales.services.custom_fields import fields_in
 from tg_sales.services.ledger import ActivityLedger
 from tg_sales.services.timeline import summarize
 
@@ -71,6 +92,8 @@ EXPORT_HEADERS = (
     "Contact emails",
     "Games",
     "Notes",
+    "Review date",
+    "Qualification source URL",
     "Archived",
     "Created (UTC)",
     "Updated (UTC)",
@@ -116,6 +139,45 @@ def _validated_website(website: str | None) -> tuple[str | None, str | None]:
             action="Enter a web address such as https://studio.example, or leave it empty.",
         )
     return url, domain_from_url(url)
+
+
+def _validated_source_url(url: str | None) -> str | None:
+    text = _clean(url)
+    if text is None:
+        return None
+    exact = exact_url(text)
+    if exact is None:
+        raise ProspectValidationError(
+            f"“{text}” is not a valid web address.",
+            action="Enter the page where this prospect was found or qualified "
+            "(https://…), or leave it empty.",
+        )
+    return exact
+
+
+def _custom_changes(
+    session: Session, record_type: RecordType, values: Mapping[str, object]
+) -> tuple[dict[str, object | None], dict[str, CustomFieldInfo]]:
+    """Validated custom-field changes for a form, and the active fields by key."""
+    fields = {f.key: f for f in fields_in(session, record_type, include_archived=False)}
+    if not values:
+        return {}, fields
+    try:
+        return clean_values(fields, values), fields
+    except InvalidValueError as exc:
+        raise ProspectValidationError(
+            str(exc), action="Correct the value or leave it empty."
+        ) from exc
+
+
+def _custom_view(
+    fields: Sequence[CustomFieldInfo], values: Mapping[str, object]
+) -> tuple[CustomValue, ...]:
+    return tuple(
+        CustomValue(f.key, f.label, f.field_type.value, values.get(f.key))
+        for f in fields
+        if not f.archived
+    )
 
 
 def _validated_name(name: str) -> str:
@@ -176,6 +238,8 @@ def _validated_contact(draft: ContactDraft) -> dict[str, Any]:
 def _json_value(value: object) -> object:
     if isinstance(value, datetime):
         return format_utc(value)
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, tuple):
         return list(value)
     if hasattr(value, "value") and not isinstance(value, str | int | float | bool):
@@ -297,9 +361,15 @@ class ProspectService:
             if self._stage_names is not None:
                 stage_names = self._stage_names() | stage_names
 
+            prospect_fields = fields_in(session, RecordType.PROSPECT, include_archived=False)
+            contact_fields = fields_in(session, RecordType.CONTACT, include_archived=False)
             links: list[LinkInfo] = []
             if organization.website:
                 links.append(LinkInfo("Website", organization.website))
+            if organization.qualification_source_url:
+                links.append(
+                    LinkInfo("Qualification source", organization.qualification_source_url)
+                )
             for contact in contacts:
                 who = contact.name or contact.business_email or "Contact"
                 for network, url in sorted(contact.social_urls.items()):
@@ -354,6 +424,7 @@ class ProspectService:
                         source_url=c.source_url,
                         source=c.source,
                         archived=c.archived_at_utc is not None,
+                        custom_fields=dict(c.custom_fields or {}),
                     )
                     for c in contacts
                 ),
@@ -383,6 +454,10 @@ class ProspectService:
                 ),
                 timeline=tuple(timeline),
                 links=tuple(links),
+                reviewed_on=organization.reviewed_on,
+                qualification_source_url=organization.qualification_source_url,
+                custom_fields=_custom_view(prospect_fields, organization.custom_fields or {}),
+                contact_fields=_custom_view(contact_fields, {}),
             )
 
     # -- organizations ------------------------------------------------------
@@ -395,8 +470,13 @@ class ProspectService:
         """
         name = _validated_name(draft.name)
         website, domain = _validated_website(draft.website)
+        source_url = _validated_source_url(draft.qualification_source_url)
         contact_values = [_validated_contact(c) for c in contacts]
         with self._database.session() as session:
+            custom, _ = _custom_changes(session, RecordType.PROSPECT, draft.custom_fields)
+            contact_custom = [
+                _custom_changes(session, RecordType.CONTACT, c.custom_fields)[0] for c in contacts
+            ]
             organization = OrganizationRepository(session).add(
                 Organization(
                     name=name,
@@ -409,6 +489,9 @@ class ProspectService:
                     source=RecordSource.MANUAL,
                     tags=list(merge_tags((), draft.tags)),
                     notes=_clean(draft.notes),
+                    reviewed_on=draft.reviewed_on,
+                    qualification_source_url=source_url,
+                    custom_fields=merged({}, custom),
                 )
             )
             self._ledger(session).record(
@@ -417,32 +500,42 @@ class ProspectService:
                 payload={"name": name},
             )
             repo = ContactRepository(session)
-            for values in contact_values:
-                repo.add(Contact(organization_id=organization.id, **values))
+            for values, extra in zip(contact_values, contact_custom, strict=True):
+                repo.add(
+                    Contact(
+                        organization_id=organization.id, custom_fields=merged({}, extra), **values
+                    )
+                )
             return organization.id
 
     def update(self, organization_id: str, draft: OrganizationDraft) -> bool:
         """Save edited values; return True if anything changed."""
         name = _validated_name(draft.name)
         website, domain = _validated_website(draft.website)
+        source_url = _validated_source_url(draft.qualification_source_url)
         with self._database.session() as session:
             organization = OrganizationRepository(session).get(organization_id)
             if organization is None:
                 raise _not_found()
-            changes = _apply_changes(
-                organization,
-                {
-                    "name": name,
-                    "normalized_name": normalize_name(name),
-                    "website": website,
-                    "domain": domain,
-                    "location": _clean(draft.location, limit=MAX_NAME_LENGTH),
-                    "country": _clean(draft.country, limit=MAX_NAME_LENGTH),
-                    "company_type": draft.company_type,
-                    "tags": merge_tags((), draft.tags),
-                    "notes": _clean(draft.notes),
-                },
-            )
+            custom, _ = _custom_changes(session, RecordType.PROSPECT, draft.custom_fields)
+            values: dict[str, Any] = {
+                "name": name,
+                "normalized_name": normalize_name(name),
+                "website": website,
+                "domain": domain,
+                "location": _clean(draft.location, limit=MAX_NAME_LENGTH),
+                "country": _clean(draft.country, limit=MAX_NAME_LENGTH),
+                "company_type": draft.company_type,
+                "tags": merge_tags((), draft.tags),
+                "notes": _clean(draft.notes),
+                "reviewed_on": draft.reviewed_on,
+                "qualification_source_url": source_url,
+            }
+            for kept in draft.keep:
+                values.pop(kept, None)
+            if custom:
+                values["custom_fields"] = merged(organization.custom_fields or {}, custom)
+            changes = _apply_changes(organization, values)
             changes.pop("normalized_name", None)
             changes.pop("domain", None)
             if changes:
@@ -528,8 +621,14 @@ class ProspectService:
         with self._database.session() as session:
             if OrganizationRepository(session).get(organization_id) is None:
                 raise _not_found()
+            custom, _ = _custom_changes(session, RecordType.CONTACT, draft.custom_fields)
             contact = ContactRepository(session).add(
-                Contact(organization_id=organization_id, source=RecordSource.MANUAL, **values)
+                Contact(
+                    organization_id=organization_id,
+                    source=RecordSource.MANUAL,
+                    custom_fields=merged({}, custom),
+                    **values,
+                )
             )
             self._record_change(
                 session,
@@ -543,10 +642,15 @@ class ProspectService:
 
     def update_contact(self, contact_id: str, draft: ContactDraft) -> bool:
         values = _validated_contact(draft)
+        for kept in draft.keep:  # not sent by the form: keep the stored values
+            values.pop(kept, None)
         with self._database.session() as session:
             contact = ContactRepository(session).get(contact_id)
             if contact is None:
                 raise _not_found()
+            custom, _ = _custom_changes(session, RecordType.CONTACT, draft.custom_fields)
+            if custom:
+                values["custom_fields"] = merged(contact.custom_fields or {}, custom)
             changes = _apply_changes(contact, values)
             changes.pop("email_normalized", None)
             if changes:
@@ -640,6 +744,7 @@ class ProspectService:
             for contact in ContactRepository(session).for_organizations(list(by_id)):
                 contacts.setdefault(contact.organization_id, []).append(contact)
             games = GameRepository(session).titles_for_organizations(list(by_id))
+            prospect_fields = fields_in(session, RecordType.PROSPECT, include_archived=False)
             rows = []
             for org_id in organization_ids:
                 o = by_id.get(org_id)
@@ -663,12 +768,19 @@ class ProspectService:
                         "; ".join(c.business_email for c in people if c.business_email),
                         "; ".join(games.get(o.id, [])),
                         o.notes,
+                        o.reviewed_on.isoformat() if o.reviewed_on else None,
+                        o.qualification_source_url,
                         "yes" if o.archived_at_utc else "no",
                         format_utc(o.created_at_utc),
                         format_utc(o.updated_at_utc),
+                        *(
+                            display_value(f.field_type, (o.custom_fields or {}).get(f.key))
+                            for f in prospect_fields
+                        ),
                     ]
                 )
-        return write_csv(path, EXPORT_HEADERS, rows)
+        headers = (*EXPORT_HEADERS, *(f.label for f in prospect_fields))
+        return write_csv(path, headers, rows)
 
     def ids_for_query(self, query: ProspectQuery) -> list[str]:
         with self._database.session() as session:

@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { expect, test } from "@playwright/test";
 import { openPage, passOnboarding, unique } from "./helpers";
 
@@ -65,7 +77,7 @@ test("pipeline cards can be moved on touch screens", async ({ page }, info) => {
   const org = await (await page.request.post("/api/prospects", { headers, data: { organization: { name } } })).json();
   const stages = await (await page.request.get("/api/pipeline/stages")).json();
   const discovered = stages.find((s: { name: string }) => s.name === "Discovered");
-  await page.request.post("/api/opportunities", { headers, data: { organization_id: org.id, product_lane: "publisher_partnership", stage_id: discovered.id } });
+  await page.request.post("/api/opportunities", { headers, data: { organization_id: org.id, product_lane: "general_sales", stage_id: discovered.id } });
   await page.goto("/pipeline");
   await passOnboarding(page);
   await page.getByRole("button", { name: `Move ${name}` }).tap();

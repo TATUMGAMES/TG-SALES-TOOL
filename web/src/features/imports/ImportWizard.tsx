@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, History, Undo2, Upload } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -25,8 +37,30 @@ import { formatBytes, formatDateTime } from "@/lib/format";
 import { useJob } from "@/lib/jobs";
 import { showError, useAction } from "@/lib/hooks";
 import { cn, plural } from "@/lib/utils";
+import { CustomFieldDialog } from "../settings/CustomFieldsPanel";
 
 type Step = "file" | "mapping" | "review" | "preview" | "done";
+
+const CREATE_FIELD = "__create_custom_field__";
+const TYPE_NAMES: Record<string, string> = { date: "a date", url: "a web address", number: "a number", boolean: "yes or no" };
+
+/** A quick check of example values so obviously wrong choices stand out before importing. */
+function looksLike(type: string, value: string): boolean {
+  const text = value.trim();
+  if (!text) return true;
+  switch (type) {
+    case "date":
+      return /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(text) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}$/.test(text) || (/\d{4}/.test(text) && !Number.isNaN(Date.parse(text)));
+    case "url":
+      return /^(https?:\/\/)?[^\s/:]+\.[^\s/:]{2,}(:\d+)?([/?#]\S*)?$/i.test(text);
+    case "number":
+      return !Number.isNaN(Number(text.replace(/[\s,$€£¥]/g, "")));
+    case "boolean":
+      return /^(y|yes|n|no|true|false|1|0|x|✓|✔|✗|☑|☐)$/i.test(text);
+    default:
+      return true;
+  }
+}
 
 interface Group {
   key: string;
@@ -113,6 +147,8 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [tab, setTab] = useState("import");
   const [undoId, setUndoId] = useState<string | null>(null);
+  const [overwrite, setOverwrite] = useState(false);
+  const [creating, setCreating] = useState<{ column: number; header: string } | null>(null);
 
   const fields = useQuery({ queryKey: ["import-fields"], queryFn: () => api.get<FieldView[]>("/imports/fields"), enabled: open });
   const history = useQuery({ queryKey: ["import-history"], queryFn: () => api.get<ImportHistoryEntry[]>("/imports/history"), enabled: open && tab === "history" });
@@ -123,6 +159,7 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
     api.post<JobRef>(`/imports/${sid}/plan`, {
       mappings: Object.entries(mapping).map(([column, field]) => ({ column: Number(column), field: field || null })),
       date_order: dateOrder,
+      overwrite,
     }),
   );
   const previewer = useJob<Outcome>(() => api.post<JobRef>(`/imports/${sid}/preview`));
@@ -141,6 +178,7 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
     setOutcome(null);
     setMapping({});
     setSheet("");
+    setOverwrite(false);
     setUploadError(null);
     reader.reset();
     planner.reset();
@@ -228,7 +266,29 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
   const job = [reader, planner, previewer, committer].find((j) => j.running);
   const progress = job?.state.status === "running" ? job.state : null;
   const mappedFields = new Set(Object.values(mapping).filter(Boolean));
-  const usedTwice = Object.values(mapping).filter((f, i, all) => f && all.indexOf(f) !== i && !fields.data?.find((x) => x.field === f)?.multiple);
+  const fieldInfo = new Map((fields.data ?? []).map((f) => [f.field, f]));
+  const usedTwice = Object.values(mapping).filter((f, i, all) => f && all.indexOf(f) !== i && !fieldInfo.get(f)?.multiple);
+  const fieldGroups = [...new Set((fields.data ?? []).map((f) => f.group ?? "Standard fields"))].map(
+    (group) => [group, (fields.data ?? []).filter((f) => (f.group ?? "Standard fields") === group)] as const,
+  );
+  const columnNote = (column: number): { text: string; tone: "danger" | "warning" } | null => {
+    const target = mapping[column];
+    if (!target || !table) return null;
+    const info = fieldInfo.get(target);
+    if (!info) return null;
+    const others = Object.entries(mapping).filter(([c, f]) => f === target && Number(c) !== column);
+    if (others.length && !info.multiple) {
+      const names = others.map(([c]) => table.headers[Number(c)] || `column ${Number(c) + 1}`).join(", ");
+      return { text: `Also chosen for ${names}. Each field can be used by one column.`, tone: "danger" };
+    }
+    const type = info.value_type ?? "text";
+    const examples = table.sample.map((row) => row[column] ?? "").filter((v) => v.trim()).slice(0, 10);
+    const bad = examples.filter((v) => !looksLike(type, v));
+    if (bad.length && TYPE_NAMES[type]) {
+      return { text: `${plural(bad.length, "example")} ${bad.length === 1 ? "does" : "do"} not look like ${TYPE_NAMES[type]} (e.g. “${bad[0]}”). Those values will be reported and left empty.`, tone: "warning" };
+    }
+    return null;
+  };
 
   const footer = (() => {
     if (tab === "history") return <Button variant="outline" onClick={() => close(false)}>Close</Button>;
@@ -352,6 +412,18 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
                   )}
                 </Field>
               </div>
+              <label className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+                <Switch checked={overwrite} onCheckedChange={setOverwrite} aria-label="Replace existing values" />
+                <span>
+                  <span className="font-medium">Replace existing values with the file's values</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Off (recommended): for prospects you already have, the import only fills empty fields and reports different values. On: different values of the website, type, location,
+                    country, review date, qualification source URL, contact job titles, game details and custom fields are replaced. Names, notes, tags and outreach status are never replaced.
+                    Undo restores replaced values.
+                  </span>
+                </span>
+              </label>
+              <p className="text-xs text-muted-foreground">Suggestions are only a starting point: check every column. Columns set to “Don't import” are left out; nothing else is dropped without a warning.</p>
               {!mappedFields.has("organization_name") ? <p className="text-sm font-medium text-danger">Choose which column holds the studio or company name.</p> : null}
               {usedTwice.length ? <p className="text-sm font-medium text-danger">Each field can be used by one column only.</p> : null}
               <div className="overflow-x-auto rounded-lg border">
@@ -367,13 +439,35 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
                           {table.sample.slice(0, 3).map((row) => row[s.column]).filter(Boolean).join(" · ") || "—"}
                         </td>
                         <td className="px-3 py-2">
-                          <NativeSelect aria-label={`Field for ${s.header}`} value={mapping[s.column] ?? ""} onChange={(e) => setMapping({ ...mapping, [s.column]: e.target.value })}>
+                          <NativeSelect
+                            aria-label={`Field for ${s.header}`}
+                            value={mapping[s.column] ?? ""}
+                            onChange={(e) => {
+                              if (e.target.value === CREATE_FIELD) setCreating({ column: s.column, header: s.header });
+                              else setMapping({ ...mapping, [s.column]: e.target.value });
+                            }}
+                          >
                             <option value="">Don't import</option>
-                            {(fields.data ?? []).map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
+                            {fieldGroups.map(([group, items]) => (
+                              <optgroup key={group} label={group}>
+                                {items.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
+                              </optgroup>
+                            ))}
+                            <option value={CREATE_FIELD}>+ Create custom field…</option>
                           </NativeSelect>
+                          {(() => {
+                            const note = columnNote(s.column);
+                            return note ? <p className={cn("mt-1 text-xs", note.tone === "danger" ? "font-medium text-danger" : "text-warning")}>{note.text}</p> : null;
+                          })()}
                         </td>
                         <td className="px-3 py-2 text-xs">
-                          {s.field ? <Badge tone={s.confidence >= 0.9 ? "success" : "warning"}>{Math.round(s.confidence * 100)}% sure</Badge> : <span className="text-muted-foreground">{s.note || "Not recognized"}</span>}
+                          {mapping[s.column] && mapping[s.column] !== (s.field ?? "") ? (
+                            <Badge tone="info">Your choice</Badge>
+                          ) : s.field ? (
+                            <Badge tone={s.confidence >= 0.9 ? "success" : "warning"}>Suggested · {Math.round(s.confidence * 100)}% sure</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">{s.note || "Not recognized"}</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -455,13 +549,15 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
               <p className="font-medium">{step === "done" ? "Import saved." : "This is exactly what will happen:"}</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
+                  ["Rows imported", outcome.counts.rows_imported],
+                  ["Rows skipped", outcome.counts.rows_skipped],
+                  ["Rows failed", outcome.counts.rows_failed ?? outcome.counts.error_rows],
+                  ["Warnings", outcome.counts.warnings],
                   ["New prospects", outcome.counts.organizations_created],
                   ["Updated prospects", outcome.counts.organizations_updated],
                   ["New contacts", outcome.counts.contacts_created],
                   ["New games", outcome.counts.games_created],
-                  ["Skipped", outcome.counts.organizations_skipped],
-                  ["Rows with errors", outcome.counts.error_rows],
-                  ["Warnings", outcome.counts.warnings],
+                  ...(overwrite ? [["Values replaced", outcome.counts.values_replaced]] : []),
                 ].map(([label, value]) => (
                   <Card key={String(label)} className="p-3">
                     <p className="text-xs text-muted-foreground">{label}</p>
@@ -469,7 +565,12 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
                   </Card>
                 ))}
               </div>
-              <p className="text-sm text-muted-foreground">Existing values are never overwritten; imports only add missing information. You can undo an import from Import history.</p>
+              <p className="text-sm text-muted-foreground">
+                {overwrite
+                  ? "Different existing values are replaced with the file's values (never names, notes, tags or outreach status)."
+                  : "Existing values are not overwritten; the import only adds missing information."}{" "}
+                Skipped rows changed nothing (already present or chosen to skip); failed rows are listed below with the reason. You can undo an import from Import history.
+              </p>
               {outcome.backup ? <p className="text-xs text-muted-foreground">A backup was saved first ({outcome.backup}).</p> : null}
               <IssueList issues={outcome.issues} total={outcome.issue_count} />
             </div>
@@ -500,6 +601,15 @@ export function ImportWizard({ open, onOpenChange }: { open: boolean; onOpenChan
           </div>
         </TabsContent>
       </Tabs>
+      <CustomFieldDialog
+        open={creating !== null}
+        initialLabel={creating?.header ?? ""}
+        onOpenChange={(o) => !o && setCreating(null)}
+        onCreated={(field) => {
+          if (creating) setMapping((current) => ({ ...current, [creating.column]: field.target }));
+          void fields.refetch();
+        }}
+      />
       <ConfirmDialog
         open={undoId !== null}
         onOpenChange={(o) => !o && setUndoId(null)}

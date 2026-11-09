@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Download, ExternalLink, FileBarChart2, FileText, FolderOpen, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -9,18 +21,19 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, NativeSelect } from "@/components/ui/form";
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Progress, Switch } from "@/components/ui/misc";
 import { api, apiUrl, download } from "@/lib/api";
-import type { ActorChoice, JobRef, ProductLane, ReportInfo, SnapshotView } from "@/lib/api-types";
+import type { ActorChoice, JobRef, ReportInfo, SnapshotView } from "@/lib/api-types";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { showError, useAction, useInfo } from "@/lib/hooks";
 import { useJob } from "@/lib/jobs";
-import { LANE_LABELS } from "@/lib/types";
+import { useLanes } from "@/lib/lanes";
 
 export function ReportsPage() {
   const client = useQueryClient();
   const info = useInfo();
   const [period, setPeriod] = useState<PeriodValue>({ preset: "1m", start: "", end: "" });
   const [actor, setActor] = useState("");
-  const [lane, setLane] = useState<"" | ProductLane>("");
+  const [lane, setLane] = useState("");
+  const lanes = useLanes();
   const [html, setHtml] = useState(true);
   const [deleting, setDeleting] = useState<ReportInfo | null>(null);
   const [deletingSnapshot, setDeletingSnapshot] = useState<SnapshotView | null>(null);
@@ -73,11 +86,11 @@ export function ReportsPage() {
               </NativeSelect>
             )}
           </Field>
-          <Field label="Product lane" className="min-w-48">
+          <Field label="Sales lane" className="min-w-48">
             {(p) => (
-              <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value as "" | ProductLane)}>
+              <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value)}>
                 <option value="">All lanes</option>
-                {Object.entries(LANE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {lanes.all.map((l) => <option key={l.key} value={l.key}>{l.name}{l.archived ? " (archived)" : ""}</option>)}
               </NativeSelect>
             )}
           </Field>

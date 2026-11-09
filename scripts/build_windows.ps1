@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 <#
 .SYNOPSIS
     Build the Windows release folder and ZIP: tg_sales.exe + PostgreSQL runtime + web app.
@@ -58,7 +68,7 @@ Copy-Item -Recurse 'build\pyinstaller\tg_sales\*' $out
 New-Item -ItemType Directory -Force "$out\runtime" | Out-Null
 Copy-Item -Recurse 'runtime\postgresql' "$out\runtime\postgresql"
 Copy-Item -Recurse 'web\dist' "$out\web"
-Copy-Item launch.bat, stop.bat, LICENSE $out
+Copy-Item launch.bat, stop.bat, LICENSE, NOTICE, TRADEMARKS.md $out
 Copy-Item 'docs\INSTALL_WINDOWS.txt' "$out\README.txt"
 
 $zip = "dist\$name.zip"

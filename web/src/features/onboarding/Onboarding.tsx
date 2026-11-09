@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -59,7 +71,7 @@ export function Onboarding() {
             </NativeSelect>
           )}
         </Field>
-        <p className="text-sm text-muted-foreground">Add your company logo any time on the Resources page.</p>
+        <p className="text-sm text-muted-foreground">Set your company name, logo, sales lanes and custom fields any time in Settings.</p>
       </div>
     </Dialog>
   );

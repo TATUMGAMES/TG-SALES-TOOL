@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { cva, type VariantProps } from "class-variance-authority";
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -57,13 +69,6 @@ export function Badge({
 }: HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>) {
   return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
 }
-
-/** Brand color for a product lane or stage, always paired with a text label. */
-export const LANE_COLORS: Record<string, string> = {
-  data_licensing: "var(--brand-teal)",
-  publisher_partnership: "var(--brand-purple)",
-  mikros_marketing: "var(--brand-yellow)",
-};
 
 export const SERIES_COLORS = ["#a787bd", "#86c4c2", "#c7d47f", "#f6d271", "#d87b7a"];
 

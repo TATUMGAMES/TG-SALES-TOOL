@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """An API client backed by a fresh PostgreSQL database and a fake Steam store."""
 
 from __future__ import annotations
@@ -92,6 +102,7 @@ def api(
     )
     http = HttpClient(transport=fake_steam.transport(), min_interval=0, sleep=lambda _s: None)
     context = AppContext(server, paths, http=http, clock=clock)
+    context.services.lanes.apply_preset("tatum_games")  # the lanes most tests use
     app = create_app(context)
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         yield Api(client, context)

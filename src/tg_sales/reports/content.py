@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Report content: sections, tables and charts built from KPI results.
 
 Every number comes from the same KPI calculation as the dashboard
@@ -14,8 +24,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
 
-from tg_sales.domain.enums import ActivityType, ProductLane, RecordSource, StageOutcome
+from tg_sales.domain.enums import ActivityType, RecordSource, StageOutcome
 from tg_sales.domain.kpi import METRIC_LABELS, DrillRow, KpiFilters, KpiReport, Metric, Unit
+from tg_sales.domain.lanes import label_for_key
 from tg_sales.domain.opportunities import ACTIVITY_LABELS
 from tg_sales.domain.periods import DateRange, describe_range
 from tg_sales.domain.time import to_local
@@ -23,11 +34,6 @@ from tg_sales.domain.time import to_local
 NOT_AVAILABLE = "Not available"
 PDF_ROW_LIMIT = 25  # longer lists are complete in the CSV files
 
-LANE_LABELS: dict[ProductLane, str] = {
-    ProductLane.DATA_LICENSING: "Data licensing",
-    ProductLane.PUBLISHER_PARTNERSHIP: "Publisher partnership",
-    ProductLane.MIKROS_MARKETING: "MIKROS Marketing",
-}
 SOURCE_LABELS: dict[RecordSource, str] = {
     RecordSource.MANUAL: "Added manually",
     RecordSource.IMPORT: "Imported",
@@ -112,12 +118,16 @@ class ReportMeta:
     generated_at: datetime  # UTC
     app_version: str
     zone: tzinfo | None = None
+    lane_names: Mapping[str, str] = field(default_factory=dict)  # lane key -> name
+
+    def lane_label(self, key: str) -> str:
+        return self.lane_names.get(key) or label_for_key(key)
 
     @property
     def filter_text(self) -> str:
         parts = [
             f"Salesperson: {self.salesperson or 'All'}",
-            f"Product lane: {LANE_LABELS[self.filters.lane] if self.filters.lane else 'All'}",
+            f"Sales lane: {self.lane_label(self.filters.lane) if self.filters.lane else 'All'}",
         ]
         return " · ".join(parts)
 
@@ -341,13 +351,13 @@ def build_report(
     for count in report.activity_counts:
         actor = actor_names.get(count.actor_id or "", "Unknown")
         by_actor[actor][count.type] += count.count
-        by_lane[LANE_LABELS[count.lane] if count.lane else "Not linked to an opportunity"] += (
+        by_lane[meta.lane_label(count.lane) if count.lane else "Not linked to an opportunity"] += (
             count.count
         )
     types = sorted({c.type for c in report.activity_counts}, key=lambda t: t.value)
     activity = Section(
         "activity",
-        "Activity by salesperson and product lane",
+        "Activity by salesperson and sales lane",
         tables=(
             Table(
                 "activity_by_salesperson",
@@ -361,8 +371,8 @@ def build_report(
             ),
             Table(
                 "activity_by_lane",
-                "Activity by product lane",
-                ("Product lane", "Events"),
+                "Activity by sales lane",
+                ("Sales lane", "Events"),
                 tuple(sorted(by_lane.items())),
                 DEFINITIONS["activity"],
             ),

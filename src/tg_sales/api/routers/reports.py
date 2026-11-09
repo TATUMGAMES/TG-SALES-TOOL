@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Reports (PDF, CSV, HTML preview) and dashboard snapshots."""
 
 from __future__ import annotations
@@ -12,7 +22,6 @@ from pydantic import BaseModel, Field
 from tg_sales import __version__
 from tg_sales.api.deps import Body, Ctx, JobRef, Ok, Svc, job_ref
 from tg_sales.api.routers.dashboard import resolve_period
-from tg_sales.domain.enums import ProductLane
 from tg_sales.domain.kpi import KpiFilters
 from tg_sales.domain.periods import PRESET_LABELS, PeriodPreset
 from tg_sales.errors import TgSalesError
@@ -36,7 +45,7 @@ class ReportIn(Body):
     start: date | None = None
     end: date | None = None
     actor_id: str | None = None
-    lane: ProductLane | None = None
+    lane: str | None = Field(default=None, max_length=32)  # sales lane key
     include_html: bool = True
 
 
@@ -54,6 +63,7 @@ def create(body: ReportIn, ctx: Ctx, svc: Svc) -> JobRef:
         KpiFilters(body.actor_id or None, body.lane),
         salesperson=actors.get(body.actor_id) if body.actor_id else None,
         include_html=body.include_html,
+        lane_names=svc.lanes.names(),
     )
     zone = svc.settings.get().zone()
     reports = catalog(ctx)
@@ -74,7 +84,7 @@ def create(body: ReportIn, ctx: Ctx, svc: Svc) -> JobRef:
             {
                 "preset": body.preset.value,
                 "actor_id": body.actor_id,
-                "lane": body.lane.value if body.lane else None,
+                "lane": body.lane,
             },
         )
         return {"report_id": report_id, "pages": entry.pages}

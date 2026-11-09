@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Database backups and restore for PostgreSQL.
 
 A backup is a ``pg_dump`` custom-format archive plus a small JSON manifest
@@ -55,7 +65,15 @@ logger = logging.getLogger(__name__)
 SUFFIX = ".dump"
 MANIFEST_SUFFIX = ".json"
 NAME_PATTERN = re.compile(r"^tg_sales_backup_\d{8}T\d{9}Z_[a-z-]{3,24}\.dump$")
-REASONS = ("manual", "scheduled", "pre-migration", "pre-import", "pre-sync", "pre-restore")
+REASONS = (
+    "manual",
+    "scheduled",
+    "pre-migration",
+    "pre-import",
+    "pre-sync",
+    "pre-restore",
+    "pre-lane-move",
+)
 DEFAULT_KEEP_LATEST = 10
 DEFAULT_KEEP_MONTHLY = 6
 

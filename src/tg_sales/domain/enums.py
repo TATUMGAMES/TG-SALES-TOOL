@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Enumerated values stored in the database.
 
 Values are stored as their lowercase text form so the database stays readable
@@ -12,6 +22,13 @@ from enum import StrEnum
 
 
 class ProductLane(StrEnum):
+    """Keys of the original Tatum Games sales lanes.
+
+    Lanes are configurable (the ``sales_lanes`` table, Settings > Sales lanes);
+    these keys remain valid lane keys on installations that use them and in
+    the "Tatum Games" preset. New code must not assume any lane exists.
+    """
+
     DATA_LICENSING = "data_licensing"
     PUBLISHER_PARTNERSHIP = "publisher_partnership"
     MIKROS_MARKETING = "mikros_marketing"

@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Transfer a desktop (SQLite) tg_sales database into PostgreSQL, then verify it.
 
 Guarantees:
@@ -40,7 +50,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Boolean, Date, Integer, MetaData, Table, select, text, update
+from sqlalchemy import Boolean, Date, Integer, MetaData, Table, func, select, text, update
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, Engine
@@ -50,6 +60,7 @@ from tg_sales.db.database import DEVICE_ID_KEY, Database
 from tg_sales.db.models import Base
 from tg_sales.db.types import UTCDateTime
 from tg_sales.domain.enums import ActivityType
+from tg_sales.domain.lanes import TATUM_GAMES_LANES, label_for_key, lane_id
 from tg_sales.domain.time import format_utc, parse_utc
 from tg_sales.legacy.sqlite_database import create_sqlite_engine, prepare_copy
 from tg_sales.services.identity import CURRENT_ACTOR_KEY
@@ -61,7 +72,7 @@ SYSTEM_DEVICE_ID = "00000000-0000-0000-0000-000000000000"
 NEW_ONLY_TABLES = frozenset({"change_log", "report_records", "resource_links"})
 # Tables whose rows say nothing about the user's own data; a database whose other
 # tables are empty counts as "new".
-SEED_TABLES = frozenset({"pipeline_stages", "settings", "actors"})
+SEED_TABLES = frozenset({"pipeline_stages", "settings", "actors", "sales_lanes"})
 
 
 class TransferError(Exception):
@@ -390,6 +401,7 @@ def transfer(
                     _insert(connection, table, values, result, report, raw)
                     known.setdefault(table.name, set()).add(str(values["id"]))
                 known.setdefault(table.name, set()).update(str(i) for i in existing_ids)
+            _ensure_lanes(connection, target.clock.now())
             _check_references(connection, report)
             if dry_run:
                 transaction.rollback()
@@ -443,8 +455,9 @@ def _insert(
                 )
             )
         return
-    current = _row_key(table, existing)
-    incoming = _row_key(table, values)
+    # Compare only the columns the desktop version had; newer columns keep their values.
+    incoming = {k: v for k, v in _row_key(table, values).items() if k in values}
+    current = {k: v for k, v in _row_key(table, existing).items() if k in incoming}
     if current == incoming:
         result.already_present += 1
         return
@@ -514,6 +527,41 @@ def _drop_orphans(
     return kept
 
 
+def _ensure_lanes(connection: Connection, now: datetime) -> None:
+    """Give every lane key used by transferred records a lane (the desktop lanes were fixed)."""
+    lanes = Base.metadata.tables["sales_lanes"]
+    opportunities = Base.metadata.tables["opportunities"]
+    stages = Base.metadata.tables["pipeline_stages"]
+    used = set(connection.scalars(select(opportunities.c.product_lane).distinct()))
+    used |= set(
+        connection.scalars(
+            select(stages.c.product_lane).where(stages.c.product_lane.is_not(None)).distinct()
+        )
+    )
+    present = set(connection.scalars(select(lanes.c.key)))
+    presets = {lane.key: lane for lane in TATUM_GAMES_LANES}
+    order = connection.scalar(select(func.max(lanes.c.sort_order))) or 0
+    for key in sorted(used - present):
+        order += 10
+        preset = presets.get(key)
+        connection.execute(
+            pg_insert(lanes)
+            .values(
+                id=lane_id(key),
+                key=key,
+                name=preset.name if preset else label_for_key(key),
+                description=preset.description if preset else None,
+                color=preset.color if preset else None,
+                sort_order=order,
+                technical_handoff=preset.technical_handoff if preset else False,
+                created_at_utc=now,
+                updated_at_utc=now,
+                created_by_device_id=SYSTEM_DEVICE_ID,
+            )
+            .on_conflict_do_nothing()
+        )
+
+
 def _check_references(connection: Connection, report: TransferReport) -> None:
     """Fail fast (before COMMIT) with a readable message if references are broken."""
     try:
@@ -532,7 +580,8 @@ def _normalized_source(table: Table, rows: Iterable[dict[str, Any]]) -> dict[str
             values = _convert(table, raw)
         except _Invalid:
             continue
-        out[str(values["id"])] = _row_key(table, values)
+        # Only columns the desktop version had; newer columns keep their defaults.
+        out[str(values["id"])] = {k: v for k, v in _row_key(table, values).items() if k in raw}
     return out
 
 
@@ -553,7 +602,12 @@ def verify(source: dict[str, list[dict[str, Any]]], target: Database) -> dict[st
             ).mappings()
             actual = {str(row["id"]): _row_key(table, row) for row in rows}
             missing = set(expected) - set(actual)
-            differing = [key for key in expected if key in actual and expected[key] != actual[key]]
+            differing = [
+                key
+                for key in expected
+                if key in actual
+                and any(actual[key].get(column) != value for column, value in expected[key].items())
+            ]
             if table.name == "pipeline_stages":
                 differing = [
                     k for k in differing if actual[k]["created_by_device_id"] != SYSTEM_DEVICE_ID

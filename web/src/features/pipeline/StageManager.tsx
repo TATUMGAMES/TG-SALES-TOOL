@@ -1,3 +1,15 @@
+/*
+ * Copyright 2013-present Tatum Games, LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at: https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Archive, ArchiveRestore, Plus } from "lucide-react";
 import { useState } from "react";
@@ -7,9 +19,9 @@ import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Field, Input, NativeSelect } from "@/components/ui/form";
 import { ErrorState, LoadingRows } from "@/components/ui/misc";
 import { api } from "@/lib/api";
-import type { ProductLane, StageInfo, StageOutcome } from "@/lib/api-types";
+import type { StageInfo, StageOutcome } from "@/lib/api-types";
 import { useAction } from "@/lib/hooks";
-import { LANE_LABELS } from "@/lib/types";
+import { useLanes } from "@/lib/lanes";
 
 const OUTCOMES: Record<StageOutcome, string> = { open: "Open", won: "Won", lost: "Lost", not_a_fit: "Not a fit" };
 
@@ -17,6 +29,7 @@ function StageRow({ stage, stages, index, onMove }: { stage: StageInfo; stages: 
   const [name, setName] = useState(stage.name);
   const [archiving, setArchiving] = useState(false);
   const [target, setTarget] = useState("");
+  const lanes = useLanes();
   const invalidate = [["stages-all"], ["stages"], ["board"]];
   const rename = useAction(() => api.patch(`/pipeline/stages/${stage.id}`, { name }), { invalidate, success: "Stage renamed" });
   const outcome = useAction((value: StageOutcome) => api.patch(`/pipeline/stages/${stage.id}`, { outcome: value }), { invalidate, success: "Saved" });
@@ -37,7 +50,7 @@ function StageRow({ stage, stages, index, onMove }: { stage: StageInfo; stages: 
       <NativeSelect aria-label={`Outcome of ${stage.name}`} className="w-36" value={stage.outcome} onChange={(e) => outcome.mutate(e.target.value as StageOutcome)} disabled={stage.archived}>
         {Object.entries(OUTCOMES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </NativeSelect>
-      {stage.product_lane ? <Badge tone="info">{LANE_LABELS[stage.product_lane]} only</Badge> : null}
+      {stage.product_lane ? <Badge tone="info">{lanes.label(stage.product_lane)} only</Badge> : null}
       <Badge>{stage.opportunity_count ?? 0} open</Badge>
       {stage.archived ? (
         <Button variant="outline" size="sm" onClick={() => restore.mutate()}><ArchiveRestore /> Restore</Button>
@@ -73,7 +86,8 @@ export function StageManager({ open, onOpenChange }: { open: boolean; onOpenChan
     enabled: open,
   });
   const [name, setName] = useState("");
-  const [lane, setLane] = useState<"" | ProductLane>("");
+  const [lane, setLane] = useState("");
+  const lanes = useLanes();
   const [outcome, setOutcome] = useState<StageOutcome>("open");
   const invalidate = [["stages-all"], ["stages"], ["board"]];
   const create = useAction(() => api.post("/pipeline/stages", { name, lane: lane || null, outcome }), { invalidate, success: "Stage added" });
@@ -118,11 +132,11 @@ export function StageManager({ open, onOpenChange }: { open: boolean; onOpenChan
             </NativeSelect>
           )}
         </Field>
-        <Field label="Product lane">
+        <Field label="Sales lane">
           {(p) => (
-            <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value as "" | ProductLane)}>
+            <NativeSelect {...p} value={lane} onChange={(e) => setLane(e.target.value)}>
               <option value="">All lanes</option>
-              {Object.entries(LANE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {lanes.active.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
             </NativeSelect>
           )}
         </Field>

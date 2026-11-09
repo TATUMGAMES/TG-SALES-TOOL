@@ -1,3 +1,13 @@
+# Copyright 2013-present Tatum Games, LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at: https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
 """Prospect (organization) data passed between services and the UI, and duplicate rules.
 
 Duplicate detection distinguishes strong evidence (same identifying website
@@ -19,7 +29,6 @@ from tg_sales.domain.enums import (
     ContactStatus,
     GameRole,
     OrganizationType,
-    ProductLane,
     RecordSource,
     ReleasePrecision,
 )
@@ -30,7 +39,13 @@ SIMILAR_NAME_THRESHOLD = 0.88
 
 @dataclass(frozen=True)
 class OrganizationDraft:
-    """Values entered for a new or edited organization."""
+    """Values entered for a new or edited organization.
+
+    ``custom_fields`` holds changes by field key (None clears a value); fields
+    not mentioned keep their values. Names in ``keep`` (``reviewed_on``,
+    ``qualification_source_url``) were not sent by the form and keep their
+    current values, so an older or simpler form never erases them.
+    """
 
     name: str
     website: str | None = None
@@ -39,6 +54,10 @@ class OrganizationDraft:
     country: str | None = None
     tags: tuple[str, ...] = ()
     notes: str | None = None
+    reviewed_on: date | None = None
+    qualification_source_url: str | None = None
+    custom_fields: Mapping[str, object] = field(default_factory=dict)
+    keep: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -51,6 +70,8 @@ class ContactDraft:
     notes: str | None = None
     provenance: str | None = None
     source_url: str | None = None
+    custom_fields: Mapping[str, object] = field(default_factory=dict)  # changes by key
+    keep: frozenset[str] = frozenset()  # fields the form did not send (kept as they are)
 
 
 @dataclass(frozen=True)
@@ -114,6 +135,17 @@ class ContactInfo:
     source_url: str | None
     source: RecordSource
     archived: bool
+    custom_fields: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CustomValue:
+    """A custom field of a record with its value (None when empty)."""
+
+    key: str
+    label: str
+    field_type: str
+    value: object | None
 
 
 @dataclass(frozen=True)
@@ -131,7 +163,7 @@ class GameInfo:
 class OpportunityInfo:
     id: str
     title: str | None
-    product_lane: ProductLane
+    product_lane: str  # sales lane key
     stage_name: str
     next_action_at: datetime | None
     next_action_note: str | None
@@ -174,6 +206,10 @@ class OrganizationDetail:
     opportunities: tuple[OpportunityInfo, ...]
     timeline: tuple[TimelineEntry, ...]
     links: tuple[LinkInfo, ...]
+    reviewed_on: date | None = None
+    qualification_source_url: str | None = None
+    custom_fields: tuple[CustomValue, ...] = ()  # active prospect fields, in order
+    contact_fields: tuple[CustomValue, ...] = ()  # active contact field definitions
 
     @property
     def follow_ups(self) -> tuple[OpportunityInfo, ...]:
